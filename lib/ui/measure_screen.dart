@@ -67,7 +67,10 @@ class _Hud extends StatelessWidget {
         children: [
           Row(
             children: [
-              _AccuracyPill(quality: hud.quality, depth: hud.depth),
+              GestureDetector(
+                onLongPress: c.toggleDebug,
+                child: _AccuracyPill(quality: hud.quality, depth: hud.depth),
+              ),
               const Spacer(),
               _Pill(
                 onTap: () {
@@ -95,6 +98,7 @@ class _Hud extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           _Hint(text: hud.hint, warning: hud.hintIsWarning),
+          if (c.showDebug) _DebugPanel(controller: c),
           const Spacer(),
           _ModeSelector(mode: c.mode, onChanged: c.setMode),
           const SizedBox(height: 20),
@@ -402,6 +406,40 @@ class _RoundButton extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Raw numbers for diagnosing accuracy problems. Long-press the accuracy pill to show/hide.
+class _DebugPanel extends StatelessWidget {
+  const _DebugPanel({required this.controller});
+
+  final MeasureController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: ValueListenableBuilder(
+        valueListenable: controller.frame,
+        builder: (context, f, _) {
+          if (f == null) return const SizedBox.shrink();
+          final text = [
+            f.diagnostics,
+            'hit ${f.hitKind.name}  dist ${f.hitDistance.toStringAsFixed(3)} m  '
+                'stab ${f.stability.toStringAsFixed(2)}',
+            'depth ${f.depthLevel}  anchors ${f.anchors.length}  scan ${(f.scanProgress * 100).round()}%',
+          ].join('\n');
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(10)),
+            child: Text(
+              text,
+              style: const TextStyle(fontSize: 11, color: Colors.white, fontFamily: 'monospace', height: 1.35),
+            ),
+          );
+        },
       ),
     );
   }

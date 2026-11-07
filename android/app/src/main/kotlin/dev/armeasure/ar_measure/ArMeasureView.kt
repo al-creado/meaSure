@@ -53,7 +53,7 @@ class ArMeasureView(private val context: Context, private val bridge: ArBridge) 
 
     private companion object {
         // Layout of the float array sent to Dart. Keep in sync with lib/ar/ar_frame.dart.
-        const val HEADER = 45
+        const val HEADER = 53
         const val NEAR = 0.05f
         const val FAR = 30f
 
@@ -73,6 +73,10 @@ class ArMeasureView(private val context: Context, private val bridge: ArBridge) 
         const val SAMPLE_GATHER_RADIUS = 0.03f // metres
         const val PLANE_PREFERENCE_WINDOW = 0.02f // metres
         const val STABLE_DEVIATION = 0.012f // metres
+
+        // ARCore needs real sideways motion (parallax) to lock in metric scale.
+        const val SCAN_KEYFRAME_STEP = 0.03f // metres between counted camera positions
+        const val SCAN_REQUIRED = 0.6f // metres of camera travel before measuring is allowed
     }
 
     private class Sample(val pos: FloatArray, val timestamp: Long)
@@ -96,6 +100,9 @@ class ArMeasureView(private val context: Context, private val bridge: ArBridge) 
     private val samples = ArrayList<Sample>()
     private var lastHit: HitResult? = null
     private var lastHitPos: FloatArray? = null // median position of the latest hit
+
+    private var scanPath = 0f
+    private var scanKeyframe: FloatArray? = null
 
     init {
         glView.preserveEGLContextOnPause = true
@@ -282,6 +289,22 @@ class ArMeasureView(private val context: Context, private val bridge: ArBridge) 
     private fun process(frame: Frame) {
         val camera = frame.camera
         val tracking = camera.trackingState == TrackingState.TRACKING
+        val camPos = camera.pose.translation
+
+        // Camera travel: only counts steps between positions >= 3 cm apart, so sensor
+        // noise while holding still never adds up.
+        if (tracking) {
+            val key = scanKeyframe
+            if (key == null) {
+                scanKeyframe = camPos
+            } else {
+                val step = dist(key, camPos)
+                if (step >= SCAN_KEYFRAME_STEP) {
+                    scanPath += step
+                    scanKeyframe = camPos
+                }
+            }
+        }
 
         // Forget anchors ARCore has given up on.
         val iter = anchors.entries.iterator()
@@ -306,7 +329,6 @@ class ArMeasureView(private val context: Context, private val bridge: ArBridge) 
         // Rolling window of recent hits => median position + stability estimate.
         var median: FloatArray? = null
         var stability = 0f
-        val camPos = camera.pose.translation
         if (hit != null) {
             val p = hit.hitPose.translation
             samples.removeAll { frame.timestamp - it.timestamp > SAMPLE_MAX_AGE_NS }
@@ -355,6 +377,18 @@ class ArMeasureView(private val context: Context, private val bridge: ArBridge) 
         }
         out[11] = stability
         out[12] = live.size.toFloat()
+        out[45] = viewWidth.toFloat()
+        out[46] = viewHeight.toFloat()
+        try {
+            val cc = session?.cameraConfig
+            if (cc != null) {
+                out[47] = cc.imageSize.width.toFloat(); out[48] = cc.imageSize.height.toFloat()
+                out[49] = cc.textureSize.width.toFloat(); out[50] = cc.textureSize.height.toFloat()
+            }
+        } catch (e: Exception) {
+        }
+        out[51] = displayRotation().toFloat()
+        out[52] = (scanPath / SCAN_REQUIRED).coerceIn(0f, 1f)
         camera.getViewMatrix(out, 13)
         camera.getProjectionMatrix(out, 29, NEAR, FAR)
         var i = HEADER

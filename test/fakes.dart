@@ -17,6 +17,7 @@ ArFrame makeFrame({
   int tracking = 1,
   int failure = 0,
   int depth = 1,
+  double scan = 1.0,
   Map<int, List<double>> anchors = const {},
 }) {
   final out = Float32List(ArFrame.header + anchors.length * 4);
@@ -33,6 +34,7 @@ ArFrame makeFrame({
   }
   out[11] = stability;
   out[12] = anchors.length.toDouble();
+  out[52] = scan;
   // View = identity.
   for (var i = 0; i < 4; i++) {
     out[13 + i * 5] = 1;

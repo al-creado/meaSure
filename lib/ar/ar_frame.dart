@@ -15,13 +15,15 @@ enum HitKind { none, plane, depth, point }
 ///  0 tracking state      1 failure reason     2 depth level (0 none, 1 depth API, 2 ToF)
 ///  3 hit kind            4 hit distance (m)   5..7 hit position   8..10 hit normal
 ///  11 hit stability 0..1 12 anchor count
+///  45 view w  46 view h  47/48 camera image w/h  49/50 texture w/h  51 display rotation
+///  52 scan progress 0..1 (camera travel needed for ARCore to lock in metric scale)
 ///  13..28 view matrix    29..44 projection matrix (column-major)
-///  45.. anchors: [id, x, y, z] * count
+///  53.. anchors: [id, x, y, z] * count
 /// ```
 class ArFrame {
   ArFrame(this.raw);
 
-  static const header = 45;
+  static const header = 53;
 
   final Float32List raw;
 
@@ -34,6 +36,14 @@ class ArFrame {
   Vec3? get hitPosition => hasHit ? Vec3(raw[5], raw[6], raw[7]) : null;
   Vec3 get hitNormal => Vec3(raw[8], raw[9], raw[10]);
   double get stability => raw[11];
+
+  /// 0..1 - how much of the camera travel ARCore needs to settle its scale has happened.
+  double get scanProgress => raw[52];
+
+  /// Diagnostics: sizes in pixels and the display rotation (0..3) ARCore was told about.
+  String get diagnostics => 'view ${raw[45].round()}x${raw[46].round()}  '
+      'image ${raw[47].round()}x${raw[48].round()}  '
+      'tex ${raw[49].round()}x${raw[50].round()}  rot ${raw[51].round()}';
 
   /// Current world positions of every live anchor, by id.
   late final Map<int, Vec3> anchors = _parseAnchors();

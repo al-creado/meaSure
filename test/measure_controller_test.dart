@@ -47,6 +47,15 @@ void main() {
     expect(c.hud.quality, 3);
   });
 
+  test('measuring is blocked until the user has moved around enough', () {
+    c.onFrame(makeFrame(hitX: 0, scan: 0.4));
+    expect(c.hud.canPlace, isFalse);
+    expect(c.hud.hint, contains('calibrate'));
+    expect(c.hud.hint, contains('40%'));
+    c.onFrame(makeFrame(hitX: 0, scan: 1));
+    expect(c.hud.canPlace, isTrue);
+  });
+
   test('distance: live value, then completes after two points', () async {
     c.onFrame(aimAt(0, 0, -1));
     await c.place();

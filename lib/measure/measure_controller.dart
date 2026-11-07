@@ -83,6 +83,15 @@ class MeasureController extends ChangeNotifier {
 
   Hud hud = _initialHud;
 
+  /// Developer readout of camera/view sizes and hit quality; toggled by long-pressing the
+  /// accuracy pill.
+  bool showDebug = false;
+
+  void toggleDebug() {
+    showDebug = !showDebug;
+    notifyListeners();
+  }
+
   /// Anchor id the reticle is currently snapped to (an existing point), if any.
   int? snapId;
 
@@ -216,6 +225,9 @@ class MeasureController extends ChangeNotifier {
         ArFailure.cameraBusy => 'Camera is in use by another app',
         _ => 'Move your phone slowly to get started',
       };
+    } else if (f.scanProgress < 1) {
+      // ARCore only knows true scale after seeing the scene from several positions.
+      hint = 'Move your phone around to calibrate \u2013 ${(f.scanProgress * 100).round()}%';
     } else if (!f.hasHit) {
       hint = 'Move slowly to find a surface';
     } else if (f.hitDistance < minRange) {
