@@ -4,14 +4,22 @@ import 'package:flutter/services.dart';
 import '../ar/ar_backend.dart';
 import '../measure/measure_controller.dart';
 import '../measure/units.dart';
+import '../storage/measurement_store.dart';
 import 'ar_view.dart';
 import 'overlay_painter.dart';
+import 'saved_screen.dart';
 import 'theme.dart';
 
 class MeasureScreen extends StatefulWidget {
-  const MeasureScreen({super.key, required this.backend, this.background = const ArView()});
+  const MeasureScreen({
+    super.key,
+    required this.backend,
+    required this.store,
+    this.background = const ArView(),
+  });
 
   final ArBackend backend;
+  final MeasurementStore store;
 
   /// The live camera view. Replaceable so the UI can be previewed without a camera.
   final Widget background;
@@ -21,7 +29,10 @@ class MeasureScreen extends StatefulWidget {
 }
 
 class _MeasureScreenState extends State<MeasureScreen> {
-  late final MeasureController _c = MeasureController(widget.backend)..start();
+  late final MeasureController _c = MeasureController(
+    widget.backend,
+    store: widget.store,
+  )..start();
 
   @override
   void dispose() {
@@ -38,7 +49,9 @@ class _MeasureScreenState extends State<MeasureScreen> {
         children: [
           widget.background,
           IgnorePointer(
-            child: RepaintBoundary(child: CustomPaint(painter: OverlayPainter(_c))),
+            child: RepaintBoundary(
+              child: CustomPaint(painter: OverlayPainter(_c)),
+            ),
           ),
           SafeArea(
             child: ListenableBuilder(
@@ -72,6 +85,15 @@ class _Hud extends StatelessWidget {
                 child: _AccuracyPill(quality: hud.quality, depth: hud.depth),
               ),
               const Spacer(),
+              _SavedButton(
+                count: c.saved.length,
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => SavedScreen(controller: c),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
               _Pill(
                 onTap: () {
                   HapticFeedback.selectionClick();
@@ -82,8 +104,10 @@ class _Hud extends StatelessWidget {
                   children: [
                     const Icon(Icons.swap_horiz_rounded, size: 18),
                     const SizedBox(width: 6),
-                    Text(c.units == UnitSystem.metric ? 'Metric' : 'Imperial',
-                        style: const TextStyle(fontWeight: FontWeight.w600)),
+                    Text(
+                      c.units.label,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
                   ],
                 ),
               ),
@@ -94,7 +118,14 @@ class _Hud extends StatelessWidget {
             duration: const Duration(milliseconds: 180),
             child: hud.value == null
                 ? const SizedBox(height: 0, key: ValueKey('none'))
-                : _ResultCard(key: const ValueKey('value'), value: hud.value!, sub: hud.sub),
+                : _ResultCard(
+                    key: const ValueKey('value'),
+                    value: hud.value!,
+                    sub: hud.sub,
+                    canSave: hud.canSave,
+                    isSaved: hud.isSaved,
+                    onSave: () => _save(context, c),
+                  ),
           ),
           const SizedBox(height: 10),
           _Hint(text: hud.hint, warning: hud.hintIsWarning),
@@ -113,7 +144,11 @@ class _Hud extends StatelessWidget {
                   onPressed: hud.canUndo ? c.undo : null,
                 ),
               ),
-              _CaptureButton(enabled: hud.canPlace, snapping: hud.snapping, onPressed: c.place),
+              _CaptureButton(
+                enabled: hud.canPlace,
+                snapping: hud.snapping,
+                onPressed: c.place,
+              ),
               SizedBox(
                 width: 64,
                 child: hud.canFinish
@@ -153,7 +188,10 @@ class _Pill extends StatelessWidget {
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-          child: DefaultTextStyle.merge(style: const TextStyle(fontSize: 13, color: Colors.white), child: child),
+          child: DefaultTextStyle.merge(
+            style: const TextStyle(fontSize: 13, color: Colors.white),
+            child: child,
+          ),
         ),
       ),
     );
@@ -199,7 +237,10 @@ class _AccuracyPill extends StatelessWidget {
           Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
           if (depth > 0) ...[
             const SizedBox(width: 8),
-            Text(depth == 2 ? 'ToF' : 'Depth', style: const TextStyle(color: Colors.white60, fontSize: 11)),
+            Text(
+              depth == 2 ? 'ToF' : 'Depth',
+              style: const TextStyle(color: Colors.white60, fontSize: 11),
+            ),
           ],
         ],
       ),
@@ -208,34 +249,141 @@ class _AccuracyPill extends StatelessWidget {
 }
 
 class _ResultCard extends StatelessWidget {
-  const _ResultCard({super.key, required this.value, this.sub});
+  const _ResultCard({
+    super.key,
+    required this.value,
+    this.sub,
+    this.canSave = false,
+    this.isSaved = false,
+    this.onSave,
+  });
 
   final String value;
   final String? sub;
+  final bool canSave;
+  final bool isSaved;
+  final VoidCallback? onSave;
 
   @override
   Widget build(BuildContext context) {
+    final showSave = canSave || isSaved;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
-      decoration: BoxDecoration(color: kPanel, borderRadius: BorderRadius.circular(22)),
-      child: Column(
+      padding: EdgeInsets.fromLTRB(22, 12, showSave ? 10 : 22, 12),
+      decoration: BoxDecoration(
+        color: kPanel,
+        borderRadius: BorderRadius.circular(22),
+      ),
+      child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 34,
-              fontWeight: FontWeight.w700,
-              letterSpacing: -0.5,
-              fontFeatures: [FontFeature.tabularFigures()],
-            ),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 34,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.5,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
+              if (sub != null)
+                Text(
+                  sub!,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: Colors.white60,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+            ],
           ),
-          if (sub != null)
-            Text(sub!, style: const TextStyle(fontSize: 13, color: Colors.white60, fontWeight: FontWeight.w500)),
+          if (showSave) ...[
+            const SizedBox(width: 10),
+            Tooltip(
+              message: isSaved ? 'Saved' : 'Save measurement',
+              child: Material(
+                color: isSaved ? Colors.transparent : kAccent,
+                shape: const CircleBorder(),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: canSave ? onSave : null,
+                  child: SizedBox(
+                    width: 44,
+                    height: 44,
+                    child: Icon(
+                      isSaved
+                          ? Icons.bookmark_added_rounded
+                          : Icons.bookmark_add_outlined,
+                      color: isSaved ? kAccent : Colors.black,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
+}
+
+class _SavedButton extends StatelessWidget {
+  const _SavedButton({required this.count, required this.onTap});
+
+  final int count;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Saved measurements',
+      child: _Pill(
+        onTap: onTap,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.bookmarks_outlined, size: 18),
+            if (count > 0) ...[
+              const SizedBox(width: 6),
+              Text(
+                '$count',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+Future<void> _save(BuildContext context, MeasureController c) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final m = await c.saveActive();
+  messenger.clearSnackBars();
+  messenger.showSnackBar(
+    SnackBar(
+      behavior: SnackBarBehavior.floating,
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 170),
+      content: Text(
+        m == null
+            ? 'Could not save \u2013 keep the points in view and try again'
+            : 'Saved ${m.valueText(c.units)}',
+      ),
+      action: m == null
+          ? null
+          : SnackBarAction(
+              label: 'View',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => SavedScreen(controller: c),
+                ),
+              ),
+            ),
+    ),
+  );
 }
 
 class _Hint extends StatelessWidget {
@@ -260,7 +408,9 @@ class _Hint extends StatelessWidget {
           fontSize: 14,
           fontWeight: FontWeight.w600,
           color: warning ? Colors.black : Colors.white,
-          shadows: warning ? null : const [Shadow(blurRadius: 6, color: Colors.black54)],
+          shadows: warning
+              ? null
+              : const [Shadow(blurRadius: 6, color: Colors.black54)],
         ),
       ),
     );
@@ -283,7 +433,10 @@ class _ModeSelector extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(4),
-      decoration: const BoxDecoration(color: kPanel, borderRadius: BorderRadius.all(Radius.circular(99))),
+      decoration: const BoxDecoration(
+        color: kPanel,
+        borderRadius: BorderRadius.all(Radius.circular(99)),
+      ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -297,7 +450,10 @@ class _ModeSelector extends StatelessWidget {
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 180),
                 curve: Curves.easeOut,
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 9,
+                ),
                 decoration: BoxDecoration(
                   color: m == mode ? Colors.white : Colors.transparent,
                   borderRadius: BorderRadius.circular(99),
@@ -305,11 +461,21 @@ class _ModeSelector extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(_icons[m], size: 18, color: m == mode ? Colors.black : Colors.white),
+                    Icon(
+                      _icons[m],
+                      size: 18,
+                      color: m == mode ? Colors.black : Colors.white,
+                    ),
                     if (m == mode) ...[
                       const SizedBox(width: 6),
-                      Text(m.label,
-                          style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w600, fontSize: 13)),
+                      Text(
+                        m.label,
+                        style: const TextStyle(
+                          color: Colors.black,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
                     ],
                   ],
                 ),
@@ -322,7 +488,11 @@ class _ModeSelector extends StatelessWidget {
 }
 
 class _CaptureButton extends StatefulWidget {
-  const _CaptureButton({required this.enabled, required this.snapping, required this.onPressed});
+  const _CaptureButton({
+    required this.enabled,
+    required this.snapping,
+    required this.onPressed,
+  });
 
   final bool enabled;
   final bool snapping;
@@ -337,7 +507,9 @@ class _CaptureButtonState extends State<_CaptureButton> {
 
   @override
   Widget build(BuildContext context) {
-    final fill = !widget.enabled ? Colors.white30 : (widget.snapping ? kAccent : Colors.white);
+    final fill = !widget.enabled
+        ? Colors.white30
+        : (widget.snapping ? kAccent : Colors.white);
     return Semantics(
       button: true,
       enabled: widget.enabled,
@@ -357,12 +529,21 @@ class _CaptureButtonState extends State<_CaptureButton> {
             padding: const EdgeInsets.all(5),
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              border: Border.all(color: Colors.white.withValues(alpha: widget.enabled ? 0.95 : 0.4), width: 3.5),
+              border: Border.all(
+                color: Colors.white.withValues(
+                  alpha: widget.enabled ? 0.95 : 0.4,
+                ),
+                width: 3.5,
+              ),
             ),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 150),
               decoration: BoxDecoration(shape: BoxShape.circle, color: fill),
-              child: Icon(Icons.add_rounded, size: 34, color: widget.enabled ? Colors.black : Colors.black45),
+              child: Icon(
+                Icons.add_rounded,
+                size: 34,
+                color: widget.enabled ? Colors.black : Colors.black45,
+              ),
             ),
           ),
         ),
@@ -372,7 +553,12 @@ class _CaptureButtonState extends State<_CaptureButton> {
 }
 
 class _RoundButton extends StatelessWidget {
-  const _RoundButton({required this.icon, required this.tooltip, this.onPressed, this.filled = false});
+  const _RoundButton({
+    required this.icon,
+    required this.tooltip,
+    this.onPressed,
+    this.filled = false,
+  });
 
   final IconData icon;
   final String tooltip;
@@ -401,7 +587,9 @@ class _RoundButton extends StatelessWidget {
               height: 52,
               child: Icon(
                 icon,
-                color: filled ? Colors.black : (enabled ? Colors.white : Colors.white30),
+                color: filled
+                    ? Colors.black
+                    : (enabled ? Colors.white : Colors.white30),
               ),
             ),
           ),
@@ -433,10 +621,18 @@ class _DebugPanel extends StatelessWidget {
           ].join('\n');
           return Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(10)),
+            decoration: BoxDecoration(
+              color: Colors.black54,
+              borderRadius: BorderRadius.circular(10),
+            ),
             child: Text(
               text,
-              style: const TextStyle(fontSize: 11, color: Colors.white, fontFamily: 'monospace', height: 1.35),
+              style: const TextStyle(
+                fontSize: 11,
+                color: Colors.white,
+                fontFamily: 'monospace',
+                height: 1.35,
+              ),
             ),
           );
         },

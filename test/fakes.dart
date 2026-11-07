@@ -92,7 +92,12 @@ class FakeAr implements ArBackend {
 
 /// A portrait-phone frame (412x892 dp) looking horizontally at a floor 1.2 m below the
 /// camera. [x],[z] is where the reticle hits the floor; null means "no surface".
-ArFrame portraitFrame(double? x, double z, Map<int, List<double>> anchors, double dist) {
+ArFrame portraitFrame(
+  double? x,
+  double z,
+  Map<int, List<double>> anchors,
+  double dist,
+) {
   final base = makeFrame(
     hitX: x,
     hitY: -1.2,

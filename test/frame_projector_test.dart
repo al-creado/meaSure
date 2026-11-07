@@ -39,7 +39,11 @@ void main() {
   });
 
   test('truncated anchor list does not crash', () {
-    final f = makeFrame(anchors: {1: [0, 0, -1]});
+    final f = makeFrame(
+      anchors: {
+        1: [0, 0, -1],
+      },
+    );
     f.raw[12] = 50; // claims more anchors than the array holds
     expect(f.anchors.length, 1);
   });
@@ -56,7 +60,9 @@ void main() {
     });
 
     test('right is +x, up is -y on screen', () {
-      final o = p.project(const Vec3(1, 1, -2))!; // tan(45) => 0.5 of the half-extent
+      final o = p.project(
+        const Vec3(1, 1, -2),
+      )!; // tan(45) => 0.5 of the half-extent
       expect(o.dx, closeTo(150, 1e-3));
       expect(o.dy, closeTo(100, 1e-3));
     });
@@ -69,7 +75,10 @@ void main() {
       final seg = p.projectSegment(const Vec3(0, 0, -2), const Vec3(0, 0, 3))!;
       expect(seg.$1.dx, closeTo(100, 1e-3));
       expect(seg.$2.dx.isFinite && seg.$2.dy.isFinite, isTrue);
-      expect(p.projectSegment(const Vec3(0, 0, 1), const Vec3(0, 0, 3)), isNull);
+      expect(
+        p.projectSegment(const Vec3(0, 0, 1), const Vec3(0, 0, 3)),
+        isNull,
+      );
     });
   });
 }

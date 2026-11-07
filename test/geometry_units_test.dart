@@ -8,31 +8,70 @@ void main() {
   group('geometry', () {
     test('distance and path length', () {
       expect(const Vec3(0, 0, 0).distanceTo(const Vec3(3, 4, 0)), 5);
-      expect(pathLength(const [Vec3(0, 0, 0), Vec3(1, 0, 0), Vec3(1, 1, 0)]), 2);
-      expect(pathLength(const [Vec3(0, 0, 0), Vec3(1, 0, 0), Vec3(1, 1, 0)], closed: true), closeTo(3.414, 1e-3));
+      expect(
+        pathLength(const [Vec3(0, 0, 0), Vec3(1, 0, 0), Vec3(1, 1, 0)]),
+        2,
+      );
+      expect(
+        pathLength(const [
+          Vec3(0, 0, 0),
+          Vec3(1, 0, 0),
+          Vec3(1, 1, 0),
+        ], closed: true),
+        closeTo(3.414, 1e-3),
+      );
     });
 
     test('polygon area is orientation independent', () {
       // 2 x 1.5 rectangle lying on the floor (XZ plane) ...
-      const floor = [Vec3(0, 0, 0), Vec3(2, 0, 0), Vec3(2, 0, 1.5), Vec3(0, 0, 1.5)];
+      const floor = [
+        Vec3(0, 0, 0),
+        Vec3(2, 0, 0),
+        Vec3(2, 0, 1.5),
+        Vec3(0, 0, 1.5),
+      ];
       expect(polygonArea(floor), closeTo(3.0, 1e-9));
       // ... and the same rectangle on a wall (XY plane), and tilted.
-      const wall = [Vec3(0, 0, 0), Vec3(2, 0, 0), Vec3(2, 1.5, 0), Vec3(0, 1.5, 0)];
+      const wall = [
+        Vec3(0, 0, 0),
+        Vec3(2, 0, 0),
+        Vec3(2, 1.5, 0),
+        Vec3(0, 1.5, 0),
+      ];
       expect(polygonArea(wall), closeTo(3.0, 1e-9));
-      final tilt = [for (final p in wall) Vec3(p.x, p.y * math.cos(0.7), p.y * math.sin(0.7))];
+      final tilt = [
+        for (final p in wall)
+          Vec3(p.x, p.y * math.cos(0.7), p.y * math.sin(0.7)),
+      ];
       expect(polygonArea(tilt), closeTo(3.0, 1e-9));
     });
 
     test('concave polygon area', () {
       // L shape: 2x2 square minus 1x1 corner = 3
-      const l = [Vec3(0, 0, 0), Vec3(2, 0, 0), Vec3(2, 0, 1), Vec3(1, 0, 1), Vec3(1, 0, 2), Vec3(0, 0, 2)];
+      const l = [
+        Vec3(0, 0, 0),
+        Vec3(2, 0, 0),
+        Vec3(2, 0, 1),
+        Vec3(1, 0, 1),
+        Vec3(1, 0, 2),
+        Vec3(0, 0, 2),
+      ];
       expect(polygonArea(l), closeTo(3.0, 1e-9));
     });
 
     test('angles', () {
-      expect(angleDegrees(const Vec3(1, 0, 0), Vec3.zero, const Vec3(0, 1, 0)), closeTo(90, 1e-9));
-      expect(angleDegrees(const Vec3(1, 0, 0), Vec3.zero, const Vec3(-1, 0, 0)), closeTo(180, 1e-9));
-      expect(angleDegrees(const Vec3(1, 0, 0), Vec3.zero, const Vec3(1, 1, 0)), closeTo(45, 1e-9));
+      expect(
+        angleDegrees(const Vec3(1, 0, 0), Vec3.zero, const Vec3(0, 1, 0)),
+        closeTo(90, 1e-9),
+      );
+      expect(
+        angleDegrees(const Vec3(1, 0, 0), Vec3.zero, const Vec3(-1, 0, 0)),
+        closeTo(180, 1e-9),
+      );
+      expect(
+        angleDegrees(const Vec3(1, 0, 0), Vec3.zero, const Vec3(1, 1, 0)),
+        closeTo(45, 1e-9),
+      );
     });
   });
 

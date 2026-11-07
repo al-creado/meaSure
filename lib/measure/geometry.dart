@@ -12,7 +12,8 @@ class Vec3 {
   Vec3 operator -(Vec3 o) => Vec3(x - o.x, y - o.y, z - o.z);
   Vec3 scale(double s) => Vec3(x * s, y * s, z * s);
   double dot(Vec3 o) => x * o.x + y * o.y + z * o.z;
-  Vec3 cross(Vec3 o) => Vec3(y * o.z - z * o.y, z * o.x - x * o.z, x * o.y - y * o.x);
+  Vec3 cross(Vec3 o) =>
+      Vec3(y * o.z - z * o.y, z * o.x - x * o.z, x * o.y - y * o.x);
   double get length => math.sqrt(x * x + y * y + z * z);
   double distanceTo(Vec3 o) => (this - o).length;
 
@@ -22,7 +23,8 @@ class Vec3 {
   }
 
   @override
-  bool operator ==(Object other) => other is Vec3 && other.x == x && other.y == y && other.z == z;
+  bool operator ==(Object other) =>
+      other is Vec3 && other.x == x && other.y == y && other.z == z;
 
   @override
   int get hashCode => Object.hash(x, y, z);

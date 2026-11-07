@@ -1,7 +1,8 @@
 enum UnitSystem { metric, imperial }
 
 extension UnitSystemX on UnitSystem {
-  UnitSystem get other => this == UnitSystem.metric ? UnitSystem.imperial : UnitSystem.metric;
+  UnitSystem get other =>
+      this == UnitSystem.metric ? UnitSystem.imperial : UnitSystem.metric;
   String get label => this == UnitSystem.metric ? 'm' : 'ft';
 }
 
@@ -26,7 +27,9 @@ String formatLength(double meters, UnitSystem units) {
 /// Formats an area given in square metres.
 String formatArea(double squareMeters, UnitSystem units) {
   if (units == UnitSystem.metric) {
-    if (squareMeters < 0.1) return '${(squareMeters * 10000).toStringAsFixed(0)} cm²';
+    if (squareMeters < 0.1) {
+      return '${(squareMeters * 10000).toStringAsFixed(0)} cm²';
+    }
     return '${squareMeters.toStringAsFixed(2)} m²';
   }
   final sqFt = squareMeters / (0.3048 * 0.3048);

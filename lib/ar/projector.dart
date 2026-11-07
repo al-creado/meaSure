@@ -25,8 +25,10 @@ class Projector {
     ];
   }
 
-  Offset _toScreen(double x, double y, double w) =>
-      Offset((x / w * 0.5 + 0.5) * size.width, (1 - (y / w * 0.5 + 0.5)) * size.height);
+  Offset _toScreen(double x, double y, double w) => Offset(
+    (x / w * 0.5 + 0.5) * size.width,
+    (1 - (y / w * 0.5 + 0.5)) * size.height,
+  );
 
   /// Screen position of [p], or null when it is behind the camera.
   Offset? project(Vec3 p) {

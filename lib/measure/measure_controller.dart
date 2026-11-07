@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 
 import '../ar/ar_backend.dart';
 import '../ar/ar_frame.dart';
+import '../storage/measurement_store.dart';
+import '../storage/saved_measurement.dart';
 import 'geometry.dart';
 import 'units.dart';
 
@@ -13,17 +15,17 @@ enum MeasureMode { distance, area, angle }
 
 extension MeasureModeX on MeasureMode {
   String get label => switch (this) {
-        MeasureMode.distance => 'Distance',
-        MeasureMode.area => 'Area',
-        MeasureMode.angle => 'Angle',
-      };
+    MeasureMode.distance => 'Distance',
+    MeasureMode.area => 'Area',
+    MeasureMode.angle => 'Angle',
+  };
 
   /// Number of points that completes the shape, or null if the user decides (area).
   int? get autoCompleteAt => switch (this) {
-        MeasureMode.distance => 2,
-        MeasureMode.angle => 3,
-        MeasureMode.area => null,
-      };
+    MeasureMode.distance => 2,
+    MeasureMode.angle => 3,
+    MeasureMode.area => null,
+  };
 }
 
 /// A measurement made of anchor ids. For [MeasureMode.angle] the order is
@@ -35,7 +37,11 @@ class Shape {
   final List<int> ids = [];
   bool closed = false; // only meaningful for area
 
-  bool get isComplete => mode == MeasureMode.area ? closed : ids.length >= mode.autoCompleteAt!;
+  /// Id of the saved copy of this measurement, once the user has saved it.
+  String? savedId;
+
+  bool get isComplete =>
+      mode == MeasureMode.area ? closed : ids.length >= mode.autoCompleteAt!;
 }
 
 /// Everything the HUD widgets display. A record, so `==` compares by value and the UI is
@@ -51,6 +57,8 @@ typedef Hud = ({
   int depth, // 0 none, 1 depth API, 2 ToF
   bool canFinish,
   bool canUndo,
+  bool canSave,
+  bool isSaved,
 });
 
 const Hud _initialHud = (
@@ -64,12 +72,26 @@ const Hud _initialHud = (
   depth: 0,
   canFinish: false,
   canUndo: false,
+  canSave: false,
+  isSaved: false,
 );
 
+/// A measurement in SI units, before formatting.
+typedef Reading = ({
+  MeasureMode mode,
+  double value,
+  double? secondary,
+  List<double> edges,
+});
+
 class MeasureController extends ChangeNotifier {
-  MeasureController(this.ar, {this.haptics = true});
+  MeasureController(this.ar, {required this.store, this.haptics = true});
 
   final ArBackend ar;
+  final MeasurementStore store;
+
+  /// Saved measurements, newest first.
+  List<SavedMeasurement> saved = [];
   final bool haptics;
 
   /// Latest AR frame. The overlay painter listens to this directly (30 Hz) without
@@ -108,6 +130,12 @@ class MeasureController extends ChangeNotifier {
 
   void start() {
     _sub ??= ar.frames.listen(onFrame);
+    loadSaved();
+  }
+
+  Future<void> loadSaved() async {
+    saved = await store.load();
+    notifyListeners();
   }
 
   // --- Frame handling ----------------------------------------------------------------------
@@ -177,30 +205,132 @@ class MeasureController extends ChangeNotifier {
     return pts;
   }
 
-  ({String value, String? sub})? _liveValue() {
-    final s = _activeShape;
-    if (s == null) return null;
-    final live = s.isComplete ? null : reticle;
-    final pts = positionsOf(s, extra: live);
+  /// SI-unit reading of [s], optionally with [extra] (the reticle) as a provisional last
+  /// point. Null while there are not enough points yet.
+  Reading? _reading(Shape s, {Vec3? extra}) {
+    final pts = positionsOf(s, extra: extra);
     switch (s.mode) {
       case MeasureMode.distance:
         if (pts.length < 2) return null;
         final d = pts[0].distanceTo(pts[1]);
-        return (
-          value: formatLength(d, units),
-          sub: formatLength(d, units.other),
-        );
+        return (mode: s.mode, value: d, secondary: null, edges: [d]);
       case MeasureMode.angle:
         if (pts.length < 3) return null;
-        return (value: formatAngle(angleDegrees(pts[0], pts[1], pts[2])), sub: null);
+        return (
+          mode: s.mode,
+          value: angleDegrees(pts[0], pts[1], pts[2]),
+          secondary: null,
+          edges: [pts[0].distanceTo(pts[1]), pts[1].distanceTo(pts[2])],
+        );
       case MeasureMode.area:
         if (pts.length < 3) return null;
-        final closed = s.closed;
+        final closed = s.closed || extra != null;
+        final edges = [
+          for (var i = 0; i + 1 < pts.length; i++)
+            pts[i].distanceTo(pts[i + 1]),
+          if (closed) pts.last.distanceTo(pts.first),
+        ];
         return (
-          value: formatArea(polygonArea(pts), units),
-          sub: 'Perimeter ${formatLength(pathLength(pts, closed: closed || live != null), units)}',
+          mode: s.mode,
+          value: polygonArea(pts),
+          secondary: edges.fold<double>(0, (a, b) => a + b),
+          edges: edges,
         );
     }
+  }
+
+  ({String value, String? sub})? _liveValue() {
+    final s = _activeShape;
+    if (s == null) return null;
+    final r = _reading(s, extra: s.isComplete ? null : reticle);
+    if (r == null) return null;
+    switch (r.mode) {
+      case MeasureMode.distance:
+        return (
+          value: formatLength(r.value, units),
+          sub: formatLength(r.value, units.other),
+        );
+      case MeasureMode.angle:
+        return (value: formatAngle(r.value), sub: null);
+      case MeasureMode.area:
+        return (
+          value: formatArea(r.value, units),
+          sub: 'Perimeter ${formatLength(r.secondary!, units)}',
+        );
+    }
+  }
+
+  // --- Saving ------------------------------------------------------------------------------
+
+  /// The finished measurement that is currently on display and has not been saved yet.
+  Shape? get _savable {
+    if (current.ids.isNotEmpty || done.isEmpty) return null;
+    final s = done.last;
+    return s.savedId == null ? s : null;
+  }
+
+  /// Saves the finished measurement on display. Returns null if there is nothing to save
+  /// (still in progress, already saved, or an anchor is currently lost).
+  Future<SavedMeasurement?> saveActive() async {
+    final s = _savable;
+    if (s == null) return null;
+    if (positionsOf(s).length != s.ids.length) {
+      return null; // an anchor is not tracked right now
+    }
+    final r = _reading(s);
+    if (r == null) return null;
+    final now = DateTime.now();
+    final m = SavedMeasurement(
+      id: now.microsecondsSinceEpoch.toString(),
+      mode: r.mode,
+      value: r.value,
+      secondary: r.secondary,
+      edges: r.edges,
+      createdAt: now,
+    );
+    await store.save(m);
+    saved = [m, ...saved];
+    s.savedId = m.id;
+    if (haptics) HapticFeedback.mediumImpact();
+    _refresh();
+    return m;
+  }
+
+  Future<void> deleteSaved(String id) async {
+    await store.delete(id);
+    saved = [
+      for (final m in saved)
+        if (m.id != id) m,
+    ];
+    for (final s in done) {
+      if (s.savedId == id) s.savedId = null;
+    }
+    _refresh();
+  }
+
+  /// Puts back an entry removed by [deleteSaved] (undo).
+  Future<void> restoreSaved(SavedMeasurement m) async {
+    await store.save(m);
+    saved = [...saved, m]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    notifyListeners();
+  }
+
+  Future<void> setNote(String id, String? note) async {
+    final i = saved.indexWhere((m) => m.id == id);
+    if (i < 0) return;
+    final updated = saved[i].withNote(note);
+    await store.save(updated);
+    saved = [...saved]..[i] = updated;
+    notifyListeners();
+  }
+
+  Future<void> clearSaved() async {
+    await store.clear();
+    saved = [];
+    for (final s in done) {
+      s.savedId = null;
+    }
+    _refresh();
   }
 
   // --- HUD ---------------------------------------------------------------------------------
@@ -227,7 +357,8 @@ class MeasureController extends ChangeNotifier {
       };
     } else if (f.scanProgress < 1) {
       // ARCore only knows true scale after seeing the scene from several positions.
-      hint = 'Move your phone around to calibrate \u2013 ${(f.scanProgress * 100).round()}%';
+      hint =
+          'Move your phone around to calibrate \u2013 ${(f.scanProgress * 100).round()}%';
     } else if (!f.hasHit) {
       hint = 'Move slowly to find a surface';
     } else if (f.hitDistance < minRange) {
@@ -258,6 +389,9 @@ class MeasureController extends ChangeNotifier {
       depth: f.depthLevel,
       canFinish: canFinish,
       canUndo: canUndo,
+      canSave: _savable != null,
+      isSaved:
+          current.ids.isEmpty && done.isNotEmpty && done.last.savedId != null,
     );
   }
 
@@ -275,7 +409,9 @@ class MeasureController extends ChangeNotifier {
     final n = current.ids.length;
     switch (mode) {
       case MeasureMode.distance:
-        return n == 0 ? 'Aim at the start point, then tap +' : 'Aim at the end point, then tap +';
+        return n == 0
+            ? 'Aim at the start point, then tap +'
+            : 'Aim at the end point, then tap +';
       case MeasureMode.angle:
         return switch (n) {
           0 => 'Tap + on the first end of the angle',
@@ -283,7 +419,9 @@ class MeasureController extends ChangeNotifier {
           _ => 'Tap + on the other end',
         };
       case MeasureMode.area:
-        return n < 3 ? 'Tap + at each corner' : 'Tap + for more corners, or ✓ to finish';
+        return n < 3
+            ? 'Tap + at each corner'
+            : 'Tap + for more corners, or ✓ to finish';
     }
   }
 
@@ -293,10 +431,14 @@ class MeasureController extends ChangeNotifier {
     if (!hud.canPlace || _busy) return;
     final snap = snapId;
     // Ignore a double tap on the point we just placed.
-    if (snap != null && current.ids.isNotEmpty && snap == current.ids.last) return;
+    if (snap != null && current.ids.isNotEmpty && snap == current.ids.last) {
+      return;
+    }
 
     // Tapping the first corner of a polygon closes it instead of adding a point.
-    if (mode == MeasureMode.area && current.ids.length >= 3 && snap == current.ids.first) {
+    if (mode == MeasureMode.area &&
+        current.ids.length >= 3 &&
+        snap == current.ids.first) {
       finishArea();
       return;
     }
@@ -333,7 +475,9 @@ class MeasureController extends ChangeNotifier {
   void undo() {
     if (current.ids.isEmpty) {
       if (done.isEmpty) return;
-      current = done.removeLast()..closed = false;
+      current = done.removeLast()
+        ..closed = false
+        ..savedId = null;
       mode = current.mode;
     }
     ar.remove(current.ids.removeLast());

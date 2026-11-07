@@ -27,10 +27,13 @@ class ArFrame {
 
   final Float32List raw;
 
-  ArTracking get tracking => ArTracking.values[_enumIndex(raw[0], ArTracking.values.length)];
-  ArFailure get failure => ArFailure.values[_enumIndex(raw[1], ArFailure.values.length)];
+  ArTracking get tracking =>
+      ArTracking.values[_enumIndex(raw[0], ArTracking.values.length)];
+  ArFailure get failure =>
+      ArFailure.values[_enumIndex(raw[1], ArFailure.values.length)];
   int get depthLevel => raw[2].round();
-  HitKind get hitKind => HitKind.values[_enumIndex(raw[3], HitKind.values.length)];
+  HitKind get hitKind =>
+      HitKind.values[_enumIndex(raw[3], HitKind.values.length)];
   bool get hasHit => hitKind != HitKind.none;
   double get hitDistance => raw[4];
   Vec3? get hitPosition => hasHit ? Vec3(raw[5], raw[6], raw[7]) : null;
@@ -41,7 +44,8 @@ class ArFrame {
   double get scanProgress => raw[52];
 
   /// Diagnostics: sizes in pixels and the display rotation (0..3) ARCore was told about.
-  String get diagnostics => 'view ${raw[45].round()}x${raw[46].round()}  '
+  String get diagnostics =>
+      'view ${raw[45].round()}x${raw[46].round()}  '
       'image ${raw[47].round()}x${raw[48].round()}  '
       'tex ${raw[49].round()}x${raw[50].round()}  rot ${raw[51].round()}';
 

@@ -1,6 +1,7 @@
 import 'package:ar_measure/ar/ar_frame.dart';
 import 'package:ar_measure/measure/measure_controller.dart';
 import 'package:ar_measure/measure/units.dart';
+import 'package:ar_measure/storage/measurement_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fakes.dart';
@@ -8,15 +9,29 @@ import 'fakes.dart';
 void main() {
   late FakeAr ar;
   late MeasureController c;
+  late MemoryMeasurementStore store;
 
   setUp(() {
     ar = FakeAr();
-    c = MeasureController(ar, haptics: false);
+    store = MemoryMeasurementStore();
+    c = MeasureController(ar, store: store, haptics: false);
   });
   tearDown(() => c.dispose());
 
-  ArFrame aimAt(double x, double y, double z, {Map<int, List<double>> anchors = const {}, double stability = 1}) =>
-      makeFrame(hitX: x, hitY: y, hitZ: z, distance: 1.2, stability: stability, anchors: anchors);
+  ArFrame aimAt(
+    double x,
+    double y,
+    double z, {
+    Map<int, List<double>> anchors = const {},
+    double stability = 1,
+  }) => makeFrame(
+    hitX: x,
+    hitY: y,
+    hitZ: z,
+    distance: 1.2,
+    stability: stability,
+    anchors: anchors,
+  );
 
   test('hints reflect tracking and range problems', () {
     c.onFrame(makeFrame(tracking: 2, failure: 2));
@@ -62,7 +77,16 @@ void main() {
     expect(c.current.ids, [1]);
 
     // Live distance from anchor 1 to wherever the reticle is now.
-    c.onFrame(aimAt(0.5, 0, -1, anchors: {1: [0, 0, -1]}));
+    c.onFrame(
+      aimAt(
+        0.5,
+        0,
+        -1,
+        anchors: {
+          1: [0, 0, -1],
+        },
+      ),
+    );
     expect(c.hud.value, '50.0 cm');
     expect(c.hud.sub, '1\u2032 7.5\u2033');
 
@@ -70,7 +94,17 @@ void main() {
     expect(c.done.length, 1);
     expect(c.current.ids, isEmpty);
 
-    c.onFrame(aimAt(2, 0, -1, anchors: {1: [0, 0, -1], 2: [0.5, 0, -1]}));
+    c.onFrame(
+      aimAt(
+        2,
+        0,
+        -1,
+        anchors: {
+          1: [0, 0, -1],
+          2: [0.5, 0, -1],
+        },
+      ),
+    );
     // Finished measurement stays shown while nothing new is in progress.
     expect(c.hud.value, '50.0 cm');
   });
@@ -79,9 +113,28 @@ void main() {
     c.setMode(MeasureMode.area);
     c.onFrame(aimAt(0, 0, -1));
     await c.place();
-    c.onFrame(aimAt(1, 0, -1, anchors: {1: [0, 0, -1]}));
+    c.onFrame(
+      aimAt(
+        1,
+        0,
+        -1,
+        anchors: {
+          1: [0, 0, -1],
+        },
+      ),
+    );
     await c.place();
-    c.onFrame(aimAt(1, 0, -2, anchors: {1: [0, 0, -1], 2: [1, 0, -1]}));
+    c.onFrame(
+      aimAt(
+        1,
+        0,
+        -2,
+        anchors: {
+          1: [0, 0, -1],
+          2: [1, 0, -1],
+        },
+      ),
+    );
     await c.place();
     final anchors = {
       1: [0.0, 0.0, -1.0],
@@ -94,7 +147,17 @@ void main() {
     expect(c.hud.canFinish, isTrue);
 
     await c.place(); // 4th corner
-    c.onFrame(aimAt(5, 0, -5, anchors: {...anchors, 4: [0, 0, -2]}));
+    c.onFrame(
+      aimAt(
+        5,
+        0,
+        -5,
+        anchors: {
+          ...anchors,
+          4: [0, 0, -2],
+        },
+      ),
+    );
     c.finishArea();
     expect(c.done.single.closed, isTrue);
     expect(c.hud.value, '1.00 m²');
@@ -105,9 +168,28 @@ void main() {
     c.setMode(MeasureMode.angle);
     c.onFrame(aimAt(1, 0, 0));
     await c.place();
-    c.onFrame(aimAt(0, 0, 0, anchors: {1: [1, 0, 0]}));
+    c.onFrame(
+      aimAt(
+        0,
+        0,
+        0,
+        anchors: {
+          1: [1, 0, 0],
+        },
+      ),
+    );
     await c.place();
-    c.onFrame(aimAt(0, 1, 0, anchors: {1: [1, 0, 0], 2: [0, 0, 0]}));
+    c.onFrame(
+      aimAt(
+        0,
+        1,
+        0,
+        anchors: {
+          1: [1, 0, 0],
+          2: [0, 0, 0],
+        },
+      ),
+    );
     expect(c.hud.value, '90.0°');
     await c.place();
     expect(c.done.single.ids, [1, 2, 3]);
@@ -116,11 +198,30 @@ void main() {
   test('snaps to an existing point and passes its id to the engine', () async {
     c.onFrame(aimAt(0, 0, -1));
     await c.place(); // anchor 1
-    c.onFrame(aimAt(0.4, 0, -1, anchors: {1: [0, 0, -1]}));
+    c.onFrame(
+      aimAt(
+        0.4,
+        0,
+        -1,
+        anchors: {
+          1: [0, 0, -1],
+        },
+      ),
+    );
     await c.place(); // anchor 2, distance measurement done
 
     // Aim 5 mm from anchor 1 => snaps.
-    c.onFrame(aimAt(0.005, 0, -1, anchors: {1: [0, 0, -1], 2: [0.4, 0, -1]}));
+    c.onFrame(
+      aimAt(
+        0.005,
+        0,
+        -1,
+        anchors: {
+          1: [0, 0, -1],
+          2: [0.4, 0, -1],
+        },
+      ),
+    );
     expect(c.snapId, 1);
     expect(c.reticle!.x, 0); // reticle jumps to the exact anchor position
     expect(c.hud.snapping, isTrue);
@@ -128,14 +229,28 @@ void main() {
     expect(ar.snaps.last, 1);
 
     // 20 cm away => no snap.
-    c.onFrame(aimAt(0.2, 0, -1, anchors: {1: [0, 0, -1], 2: [0.4, 0, -1]}));
+    c.onFrame(
+      aimAt(
+        0.2,
+        0,
+        -1,
+        anchors: {
+          1: [0, 0, -1],
+          2: [0.4, 0, -1],
+        },
+      ),
+    );
     expect(c.snapId, isNull);
   });
 
   test('tapping the first corner closes a polygon', () async {
     c.setMode(MeasureMode.area);
     final pts = <int, List<double>>{};
-    for (final (i, p) in [(1, [0.0, 0.0, -1.0]), (2, [1.0, 0.0, -1.0]), (3, [1.0, 0.0, -2.0])]) {
+    for (final (i, p) in [
+      (1, [0.0, 0.0, -1.0]),
+      (2, [1.0, 0.0, -1.0]),
+      (3, [1.0, 0.0, -2.0]),
+    ]) {
       c.onFrame(aimAt(p[0], p[1], p[2], anchors: Map.of(pts)));
       await c.place();
       pts[i] = p;
@@ -144,7 +259,11 @@ void main() {
     expect(c.snapId, 1);
     final before = ar.placed.length;
     await c.place();
-    expect(ar.placed.length, before, reason: 'closing must not create a new anchor');
+    expect(
+      ar.placed.length,
+      before,
+      reason: 'closing must not create a new anchor',
+    );
     expect(c.done.single.closed, isTrue);
   });
 
@@ -155,34 +274,65 @@ void main() {
     expect(c.current.ids, isEmpty);
   });
 
-  test('undo walks back through points and reopens finished shapes; clear resets', () async {
-    c.onFrame(aimAt(0, 0, -1));
-    await c.place();
-    c.onFrame(aimAt(1, 0, -1, anchors: {1: [0, 0, -1]}));
-    await c.place();
-    expect(c.done.length, 1);
+  test(
+    'undo walks back through points and reopens finished shapes; clear resets',
+    () async {
+      c.onFrame(aimAt(0, 0, -1));
+      await c.place();
+      c.onFrame(
+        aimAt(
+          1,
+          0,
+          -1,
+          anchors: {
+            1: [0, 0, -1],
+          },
+        ),
+      );
+      await c.place();
+      expect(c.done.length, 1);
 
-    c.undo();
-    expect(ar.removed, [2]);
-    expect(c.done, isEmpty);
-    expect(c.current.ids, [1]);
-    c.undo();
-    expect(ar.removed, [2, 1]);
-    expect(c.hud.canUndo, isFalse);
+      c.undo();
+      expect(ar.removed, [2]);
+      expect(c.done, isEmpty);
+      expect(c.current.ids, [1]);
+      c.undo();
+      expect(ar.removed, [2, 1]);
+      expect(c.hud.canUndo, isFalse);
 
-    c.onFrame(aimAt(0, 0, -1));
-    await c.place();
-    c.clearAll();
-    expect(ar.cleared, isTrue);
-    expect(c.current.ids, isEmpty);
-  });
+      c.onFrame(aimAt(0, 0, -1));
+      await c.place();
+      c.clearAll();
+      expect(ar.cleared, isTrue);
+      expect(c.current.ids, isEmpty);
+    },
+  );
 
   test('switching mode drops the unfinished shape only', () async {
     c.onFrame(aimAt(0, 0, -1));
     await c.place();
-    c.onFrame(aimAt(1, 0, -1, anchors: {1: [0, 0, -1]}));
+    c.onFrame(
+      aimAt(
+        1,
+        0,
+        -1,
+        anchors: {
+          1: [0, 0, -1],
+        },
+      ),
+    );
     await c.place(); // done: 1,2
-    c.onFrame(aimAt(0, 0, -1, anchors: {1: [0, 0, -1], 2: [1, 0, -1]}));
+    c.onFrame(
+      aimAt(
+        0,
+        0,
+        -1,
+        anchors: {
+          1: [0, 0, -1],
+          2: [1, 0, -1],
+        },
+      ),
+    );
     await c.place(); // current: 3
     c.setMode(MeasureMode.angle);
     expect(ar.removed, [3]);
@@ -192,7 +342,16 @@ void main() {
   test('unit toggle changes formatting', () async {
     c.onFrame(aimAt(0, 0, -1));
     await c.place();
-    c.onFrame(aimAt(1, 0, -1, anchors: {1: [0, 0, -1]}));
+    c.onFrame(
+      aimAt(
+        1,
+        0,
+        -1,
+        anchors: {
+          1: [0, 0, -1],
+        },
+      ),
+    );
     expect(c.hud.value, '1.00 m');
     c.toggleUnits();
     expect(c.units, UnitSystem.imperial);

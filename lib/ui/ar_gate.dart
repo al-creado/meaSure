@@ -3,7 +3,15 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../ar/ar_backend.dart';
 
-enum _GateState { checking, needCamera, cameraBlocked, installing, declined, unsupported, ready }
+enum _GateState {
+  checking,
+  needCamera,
+  cameraBlocked,
+  installing,
+  declined,
+  unsupported,
+  ready,
+}
 
 /// Gets the camera permission and makes sure ARCore is installed before showing [builder].
 class ArGate extends StatefulWidget {
@@ -43,57 +51,76 @@ class _ArGateState extends State<ArGate> with WidgetsBindingObserver {
     if (!status.isGranted && ask) status = await Permission.camera.request();
     if (!mounted) return;
     if (!status.isGranted) {
-      setState(() => _state = status.isPermanentlyDenied ? _GateState.cameraBlocked : _GateState.needCamera);
+      setState(
+        () => _state = status.isPermanentlyDenied
+            ? _GateState.cameraBlocked
+            : _GateState.needCamera,
+      );
       return;
     }
     final ar = await widget.backend.ensureArCore();
     if (!mounted) return;
-    setState(() => _state = switch (ar) {
-          ArAvailability.ready => _GateState.ready,
-          ArAvailability.installing => _GateState.installing,
-          ArAvailability.declined => _GateState.declined,
-          ArAvailability.unsupported => _GateState.unsupported,
-        });
+    setState(
+      () => _state = switch (ar) {
+        ArAvailability.ready => _GateState.ready,
+        ArAvailability.installing => _GateState.installing,
+        ArAvailability.declined => _GateState.declined,
+        ArAvailability.unsupported => _GateState.unsupported,
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return switch (_state) {
       _GateState.ready => widget.builder(context),
-      _GateState.checking => const _Message(busy: true, title: 'Getting ready…'),
-      _GateState.installing => const _Message(busy: true, title: 'Installing Google Play Services for AR…'),
+      _GateState.checking => const _Message(
+        busy: true,
+        title: 'Getting ready…',
+      ),
+      _GateState.installing => const _Message(
+        busy: true,
+        title: 'Installing Google Play Services for AR…',
+      ),
       _GateState.needCamera => _Message(
-          icon: Icons.photo_camera_outlined,
-          title: 'Camera access needed',
-          body: 'Measure uses the camera to understand the space in front of you. Nothing is recorded or uploaded.',
-          action: 'Allow camera',
-          onAction: () => _check(ask: true),
-        ),
+        icon: Icons.photo_camera_outlined,
+        title: 'Camera access needed',
+        body: 'Measure uses the camera to understand the space in front of you. Nothing is recorded or uploaded.',
+        action: 'Allow camera',
+        onAction: () => _check(ask: true),
+      ),
       _GateState.cameraBlocked => _Message(
-          icon: Icons.photo_camera_outlined,
-          title: 'Camera access is off',
-          body: 'Turn on the camera permission for Measure in system settings.',
-          action: 'Open settings',
-          onAction: openAppSettings,
-        ),
+        icon: Icons.photo_camera_outlined,
+        title: 'Camera access is off',
+        body: 'Turn on the camera permission for Measure in system settings.',
+        action: 'Open settings',
+        onAction: openAppSettings,
+      ),
       _GateState.declined => _Message(
-          icon: Icons.download_outlined,
-          title: 'Google Play Services for AR is required',
-          body: 'It provides the motion tracking behind Measure.',
-          action: 'Try again',
-          onAction: _check,
-        ),
+        icon: Icons.download_outlined,
+        title: 'Google Play Services for AR is required',
+        body: 'It provides the motion tracking behind Measure.',
+        action: 'Try again',
+        onAction: _check,
+      ),
       _GateState.unsupported => const _Message(
-          icon: Icons.phonelink_erase_outlined,
-          title: 'This device does not support AR',
-          body: 'Measure needs a phone that supports Google ARCore.',
-        ),
+        icon: Icons.phonelink_erase_outlined,
+        title: 'This device does not support AR',
+        body: 'Measure needs a phone that supports Google ARCore.',
+      ),
     };
   }
 }
 
 class _Message extends StatelessWidget {
-  const _Message({this.icon, required this.title, this.body, this.action, this.onAction, this.busy = false});
+  const _Message({
+    this.icon,
+    required this.title,
+    this.body,
+    this.action,
+    this.onAction,
+    this.busy = false,
+  });
 
   final IconData? icon;
   final String title;
@@ -114,14 +141,26 @@ class _Message extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (busy)
-                  const SizedBox(width: 28, height: 28, child: CircularProgressIndicator(strokeWidth: 2.5))
+                  const SizedBox(
+                    width: 28,
+                    height: 28,
+                    child: CircularProgressIndicator(strokeWidth: 2.5),
+                  )
                 else if (icon != null)
                   Icon(icon, size: 44, color: Colors.white70),
                 const SizedBox(height: 20),
-                Text(title, textAlign: TextAlign.center, style: text.titleLarge),
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: text.titleLarge,
+                ),
                 if (body != null) ...[
                   const SizedBox(height: 10),
-                  Text(body!, textAlign: TextAlign.center, style: text.bodyMedium?.copyWith(color: Colors.white70)),
+                  Text(
+                    body!,
+                    textAlign: TextAlign.center,
+                    style: text.bodyMedium?.copyWith(color: Colors.white70),
+                  ),
                 ],
                 if (action != null) ...[
                   const SizedBox(height: 24),
