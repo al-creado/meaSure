@@ -295,7 +295,6 @@ class _AccuracyPill extends StatelessWidget {
 
 class _ResultCard extends StatelessWidget {
   const _ResultCard({
-    super.key,
     required this.value,
     this.sub,
     this.canSave = false,
