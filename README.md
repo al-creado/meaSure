@@ -1,7 +1,7 @@
 # Measure
 
 A lightweight AR tape measure for Android, in Flutter. Point the camera, tap **+**, read the
-distance. Modes: **Distance**, **Area** (any polygon, on floors, walls or tabletops) and **Angle**.
+distance. Modes: **Distance**, **Area** (any polygon, on floors, walls or tabletops), **Volume** (floor outline x height: stacks, rooms, warehouses) and **Angle**.
 Metric / imperial, snapping to existing points, haptics, and a live accuracy indicator.
 
 ## Architecture
@@ -59,6 +59,22 @@ what ARCore can do and tells you when conditions are poor:
 Tips for users: move the phone slowly side-to-side for a few seconds before measuring (parallax
 is what ARCore needs), measure from 0.5-3 m, aim at textured, well-lit surfaces (blank white
 walls and glass track poorly), and place both ends of a line from the same position when you can.
+
+### Large spaces and loop closure
+
+Phone AR (visual-inertial odometry) drifts a little with the distance walked, so accuracy falls
+as the space grows. Roughly: stacks and rooms (1-20 m) about 1-3 %; a 100 m walk can be off by
+metres, and tracking can be lost entirely in dim, featureless or very repetitive areas.
+
+**Volume** mode: tap the floor corners, close the outline (check button, or aim back at the first
+corner), then aim at the top of the stack / ceiling. Volume = floor area (projected on the
+horizontal plane) x height above the average floor level.
+
+**Close loop**: walk the outline and come back to the start corner, aim at it and tap *Close loop*.
+The gap between where the phone thinks the start is now and where the first corner was recorded is
+the drift (shown as an error and a percentage of the walk). It is then spread along the walk in
+proportion to the distance covered (the surveyors' compass rule), which closes the outline and
+removes most of a roughly linear drift. The error is saved with the measurement.
 
 ### Ideas to push it further
 

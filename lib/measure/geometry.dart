@@ -74,3 +74,17 @@ double angleDegrees(Vec3 a, Vec3 vertex, Vec3 b) {
   final c = u.dot(v).clamp(-1.0, 1.0);
   return math.acos(c) * 180 / math.pi;
 }
+
+/// Area of the polygon's footprint on the horizontal (x/z) plane, in square metres.
+///
+/// ARCore's world is gravity-aligned (y is up), so this is the floor-plan area regardless
+/// of small tilts in the points. Works for any simple polygon, convex or not.
+double polygonAreaXZ(List<Vec3> pts) {
+  if (pts.length < 3) return 0;
+  var sum = 0.0;
+  for (var i = 0; i < pts.length; i++) {
+    final a = pts[i], b = pts[(i + 1) % pts.length];
+    sum += a.x * b.z - b.x * a.z;
+  }
+  return sum.abs() / 2;
+}

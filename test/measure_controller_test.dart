@@ -158,7 +158,7 @@ void main() {
         },
       ),
     );
-    c.finishArea();
+    c.finishOutline();
     expect(c.done.single.closed, isTrue);
     expect(c.hud.value, '1.00 m²');
     expect(c.hud.sub, 'Perimeter 4.00 m');

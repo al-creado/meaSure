@@ -152,7 +152,7 @@ void main() {
         placed[e.key] = e.value;
       }
       c.onFrame(makeFrame(hitX: 5, hitZ: -5, distance: 4, anchors: placed));
-      c.finishArea();
+      c.finishOutline();
       final m = (await c.saveActive())!;
       expect(m.value, closeTo(1.0, 1e-6));
       expect(m.secondary, closeTo(4.0, 1e-6));

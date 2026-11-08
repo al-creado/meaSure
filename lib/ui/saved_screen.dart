@@ -112,6 +112,7 @@ class _Tile extends StatelessWidget {
   static const _icons = {
     MeasureMode.distance: Icons.straighten_rounded,
     MeasureMode.area: Icons.pentagon_outlined,
+    MeasureMode.volume: Icons.view_in_ar_rounded,
     MeasureMode.angle: Icons.architecture_rounded,
   };
 

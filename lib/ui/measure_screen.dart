@@ -131,6 +131,24 @@ class _Hud extends StatelessWidget {
           _Hint(text: hud.hint, warning: hud.hintIsWarning),
           if (c.showDebug) _DebugPanel(controller: c),
           const Spacer(),
+          if (hud.canCloseLoop)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _Pill(
+                onTap: () => _closeLoop(context, c),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.sync_rounded, size: 18),
+                    SizedBox(width: 6),
+                    Text(
+                      'Close loop at start corner',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           _ModeSelector(mode: c.mode, onChanged: c.setMode),
           const SizedBox(height: 20),
           Row(
@@ -154,9 +172,9 @@ class _Hud extends StatelessWidget {
                 child: hud.canFinish
                     ? _RoundButton(
                         icon: Icons.check_rounded,
-                        tooltip: 'Finish area',
+                        tooltip: 'Finish outline',
                         filled: true,
-                        onPressed: c.finishArea,
+                        onPressed: c.finishOutline,
                       )
                     : _RoundButton(
                         icon: Icons.delete_outline_rounded,
@@ -426,6 +444,7 @@ class _ModeSelector extends StatelessWidget {
   static const _icons = {
     MeasureMode.distance: Icons.straighten_rounded,
     MeasureMode.area: Icons.pentagon_outlined,
+    MeasureMode.volume: Icons.view_in_ar_rounded,
     MeasureMode.angle: Icons.architecture_rounded,
   };
 
@@ -639,4 +658,32 @@ class _DebugPanel extends StatelessWidget {
       ),
     );
   }
+}
+
+void _closeLoop(BuildContext context, MeasureController c) {
+  final messenger = ScaffoldMessenger.of(context);
+  final r = c.closeLoop();
+  String text;
+  if (r == null) {
+    text = 'Aim at the start corner and wait for a steady reading, then try again';
+  } else {
+    final pct = r.error / r.path * 100;
+    final verdict = pct <= 0.5
+        ? 'Excellent'
+        : pct <= 2
+            ? 'Acceptable'
+            : 'High drift \u2013 consider scanning again';
+    text = 'Loop closed: ${formatLength(r.error, c.units)} off over '
+        '${formatLength(r.path, c.units)} walked (${pct.toStringAsFixed(2)} %). $verdict.';
+  }
+  messenger
+    ..clearSnackBars()
+    ..showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 170),
+        duration: const Duration(seconds: 6),
+        content: Text(text),
+      ),
+    );
 }

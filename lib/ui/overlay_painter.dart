@@ -40,7 +40,11 @@ class OverlayPainter extends CustomPainter {
 
   void _drawShape(Canvas canvas, Projector proj, ArFrame f, Shape s, Vec3? live) {
     // Placed points, in order. A null means ARCore has lost that anchor for now.
-    final placed = <Vec3?>[for (final id in s.ids) f.anchors[id]];
+    if (s.mode == MeasureMode.volume) {
+      _drawVolume(canvas, proj, s, live);
+      return;
+    }
+    final placed = <Vec3?>[for (final id in s.ids) c.pointOf(s, id)];
     final pts = <Vec3?>[...placed, if (live != null && !s.isComplete) live];
     if (pts.isEmpty) return;
     final liveIndex = (live != null && !s.isComplete) ? pts.length - 1 : -1;
@@ -94,6 +98,89 @@ class OverlayPainter extends CustomPainter {
     }
 
     // Placed points on top.
+    for (final p in placed) {
+      if (p == null) continue;
+      final o = proj.project(p);
+      if (o != null) _dot(canvas, o);
+    }
+  }
+
+  /// Volume: floor outline, then a box up to the height point.
+  void _drawVolume(Canvas canvas, Projector proj, Shape s, Vec3? live) {
+    final placed = <Vec3?>[for (final id in s.ids) c.pointOf(s, id)];
+    final heightPhase = s.closed;
+    final basePlaced = heightPhase ? placed.take(s.baseCount).toList() : placed;
+    final Vec3? top = heightPhase
+        ? (placed.length > s.baseCount ? placed[s.baseCount] : live)
+        : null;
+    final liveCorner = !heightPhase && live != null;
+    final base = <Vec3?>[...basePlaced, if (liveCorner) live];
+    if (base.isEmpty) return;
+    final allKnown = base.every((p) => p != null);
+    final units = c.units;
+
+    // Floor fill.
+    if (allKnown && base.length >= 3) {
+      final screen = [for (final p in base) proj.project(p!)];
+      if (screen.every((o) => o != null)) {
+        canvas.drawPath(
+          Path()..addPolygon(screen.cast<Offset>(), true),
+          Paint()..color = kAccent.withValues(alpha: heightPhase ? 0.12 : 0.20),
+        );
+      }
+    }
+
+    // Floor edges (the last one is the live one while outlining).
+    final n = base.length;
+    for (var i = 0; i + 1 < n; i++) {
+      final a = base[i], b = base[i + 1];
+      if (a == null || b == null) continue;
+      final seg = proj.projectSegment(a, b);
+      if (seg == null) continue;
+      final isLive = liveCorner && i + 1 == n - 1;
+      _line(canvas, seg.$1, seg.$2, isLive ? kAccent : Colors.white, dashed: isLive);
+      if ((seg.$1 - seg.$2).distance > 56) {
+        _label(canvas, proj.size, (seg.$1 + seg.$2) / 2, formatLength(a.distanceTo(b), units), accent: isLive);
+      }
+    }
+    if (n >= 3 && base.first != null && base.last != null) {
+      final seg = proj.projectSegment(base.last!, base.first!);
+      if (seg != null) {
+        if (heightPhase) {
+          _line(canvas, seg.$1, seg.$2, Colors.white);
+          if ((seg.$1 - seg.$2).distance > 56) {
+            _label(canvas, proj.size, (seg.$1 + seg.$2) / 2, formatLength(base.last!.distanceTo(base.first!), units));
+          }
+        } else if (liveCorner) {
+          _line(canvas, seg.$1, seg.$2, kAccent.withValues(alpha: 0.6), dashed: true);
+        }
+      }
+    }
+
+    // The box.
+    if (heightPhase && top != null && allKnown && n >= 3) {
+      final b = base.cast<Vec3>();
+      final floorY = b.fold<double>(0, (a, p) => a + p.y) / n;
+      final h = top.y - floorY;
+      final up = Vec3(0, h, 0);
+      final heightIsLive = s.ids.length == s.baseCount;
+      final color = heightIsLive ? kAccent : Colors.white;
+      for (var i = 0; i < n; i++) {
+        final j = (i + 1) % n;
+        final side = proj.projectSegment(b[i], b[i] + up);
+        if (side != null) _line(canvas, side.$1, side.$2, color.withValues(alpha: 0.55));
+        final lid = proj.projectSegment(b[i] + up, b[j] + up);
+        if (lid != null) _line(canvas, lid.$1, lid.$2, color);
+      }
+      final mid = proj.project(midpoint(b.first, b.first + up));
+      if (mid != null) _label(canvas, proj.size, mid, formatLength(h.abs(), units), accent: heightIsLive);
+      final lidCenter = proj.project(centroid(b) + up);
+      if (lidCenter != null) {
+        _label(canvas, proj.size, lidCenter, formatVolume(polygonAreaXZ(b) * h.abs(), units),
+            accent: heightIsLive, large: true);
+      }
+    }
+
     for (final p in placed) {
       if (p == null) continue;
       final o = proj.project(p);

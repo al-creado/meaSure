@@ -43,3 +43,23 @@ String _trim(double v, int digits) {
   final s = v.toStringAsFixed(digits);
   return s.contains('.') ? s.replaceFirst(RegExp(r'\.?0+$'), '') : s;
 }
+
+/// Formats a volume given in cubic metres.
+String formatVolume(double cubicMeters, UnitSystem units) {
+  if (units == UnitSystem.metric) {
+    return '${_volumeNumber(cubicMeters)} m\u00B3';
+  }
+  return '${_volumeNumber(cubicMeters * 35.3146667)} ft\u00B3';
+}
+
+// 2 decimals for small volumes, whole numbers with thousands separators for big ones.
+String _volumeNumber(double v) {
+  if (v < 100) return v.toStringAsFixed(2);
+  final whole = v.round().toString();
+  final buf = StringBuffer();
+  for (var i = 0; i < whole.length; i++) {
+    if (i > 0 && (whole.length - i) % 3 == 0) buf.write(',');
+    buf.write(whole[i]);
+  }
+  return buf.toString();
+}
