@@ -193,7 +193,9 @@ class OverlayPainter extends CustomPainter {
       }
       final mid = proj.project(midpoint(b.first, b.first + up));
       if (mid != null) _label(canvas, proj.size, mid, formatLength(h.abs(), units), accent: heightIsLive);
-      final lidCenter = proj.project(centroid(b) + up);
+      // Mid-height, inside the box: that is where the volume is, and it keeps the label
+      // clear of the aiming ring while the height is being set.
+      final lidCenter = proj.project(centroid(b) + up.scale(0.5));
       if (lidCenter != null) {
         _label(canvas, proj.size, lidCenter, formatVolume(polygonAreaXZ(b) * h.abs(), units),
             accent: heightIsLive, large: true);
@@ -345,6 +347,9 @@ class OverlayPainter extends CustomPainter {
       text: TextSpan(
         text: text,
         style: TextStyle(
+          // Roboto is Android's standard font; naming it keeps canvas-drawn labels (also the
+          // ones baked into saved pictures) identical everywhere.
+          fontFamily: 'Roboto',
           color: accent ? Colors.black : Colors.white,
           fontSize: large ? 16 : 13,
           fontWeight: FontWeight.w600,

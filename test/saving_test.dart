@@ -290,6 +290,15 @@ void narrowPhoneTests() {
     ar.emit(makeFrame(hitX: 0, hitZ: -1, distance: 1.2));
     await tester.pump();
     await tapPlace();
+
+    // The result flickers on and off faster than its 180 ms animation (the reticle losing and
+    // regaining the surface). This used to trip a duplicate-key assertion.
+    for (var i = 0; i < 6; i++) {
+      ar.emit(makeFrame(hitX: i.isEven ? 0.5 : null, hitZ: -1, distance: 1.2, anchors: {1: [0, 0, -1]}));
+      await tester.pump(const Duration(milliseconds: 15));
+    }
+    expect(tester.takeException(), isNull, reason: 'no duplicate-key assertion');
+
     ar.emit(makeFrame(hitX: 1, hitZ: -1, distance: 1.2, anchors: {1: [0, 0, -1]}));
     await tester.pump();
     await tapPlace();

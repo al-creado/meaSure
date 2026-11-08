@@ -119,12 +119,16 @@ class _Hud extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
-          AnimatedSwitcher(
+          // AnimatedSize, not AnimatedSwitcher: the value can appear and vanish several times
+          // within one animation (the reticle losing the surface), and switcher children
+          // with a repeated key trip Flutter's duplicate-key assertion.
+          AnimatedSize(
             duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+            alignment: Alignment.topCenter,
             child: hud.value == null
-                ? const SizedBox(height: 0, key: ValueKey('none'))
+                ? const SizedBox.shrink()
                 : _ResultCard(
-                    key: const ValueKey('value'),
                     value: hud.value!,
                     sub: hud.sub,
                     canSave: hud.canSave,
