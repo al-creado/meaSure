@@ -225,6 +225,26 @@ void main() {
       expect(find.textContaining('7 Nov 2026, 14:05'), findsOneWidget);
     });
 
+    testWidgets('editing a note saves it and does not use a disposed controller', (tester) async {
+      await tester.runAsync(loadTestFonts);
+      final store = MemoryMeasurementStore();
+      await store.save(sample('a', DateTime(2026, 11, 1), value: 0.456));
+      final c = MeasureController(FakeAr(), store: store, haptics: false);
+      addTearDown(c.dispose);
+      await c.loadSaved();
+
+      await tester.pumpWidget(MaterialApp(home: SavedScreen(controller: c)));
+      await tester.tap(find.text('45.6 cm'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'Dock 3');
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Dock 3'), findsOneWidget);
+      expect(store.items.single.note, 'Dock 3');
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('swipe deletes from the list and the store', (tester) async {
       final store = MemoryMeasurementStore();
       final m = sample('a', DateTime(2026, 11, 1), value: 0.456);
@@ -251,6 +271,7 @@ void main() {
 
 void narrowPhoneTests() {
   testWidgets('top bar and save button fit on a 360dp phone and saving works end to end', (tester) async {
+    await tester.runAsync(loadTestFonts);
     tester.view.physicalSize = const Size(360 * 3, 740 * 3);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);

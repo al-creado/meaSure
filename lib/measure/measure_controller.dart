@@ -45,6 +45,10 @@ class Shape {
   /// Volume: how many of [ids] are floor corners (the height point comes after them).
   int baseCount = 0;
 
+  /// Volume: a height typed in by the user (metres), used instead of a measured height point.
+  /// For tall spaces such as warehouse ceilings that are beyond AR range.
+  double? manualHeight;
+
   /// Set when the outline was closed with "Close loop": how far the walk ended from where it
   /// started, and the length of the walk (both metres).
   ({double error, double path})? loop;
@@ -57,7 +61,8 @@ class Shape {
 
   bool get isComplete => switch (mode) {
     MeasureMode.area => closed,
-    MeasureMode.volume => closed && ids.length > baseCount,
+    MeasureMode.volume =>
+      closed && (ids.length > baseCount || manualHeight != null),
     _ => ids.length >= mode.autoCompleteAt!,
   };
 }
@@ -75,6 +80,7 @@ typedef Hud = ({
   int depth, // 0 none, 1 depth API, 2 ToF
   bool canFinish,
   bool canCloseLoop,
+  bool canTypeHeight,
   bool canUndo,
   bool canSave,
   bool isSaved,
@@ -91,6 +97,7 @@ const Hud _initialHud = (
   depth: 0,
   canFinish: false,
   canCloseLoop: false,
+  canTypeHeight: false,
   canUndo: false,
   canSave: false,
   isSaved: false,
@@ -271,11 +278,10 @@ class MeasureController extends ChangeNotifier {
           loop: s.loop,
         );
       case MeasureMode.volume:
-        // Still outlining the floor, or outline closed and the height point is next/placed.
-        if (s.closed ? pts.length != s.baseCount + 1 : pts.length < 3) {
-          return null;
-        }
-        final base = s.closed ? pts.sublist(0, s.baseCount) : pts;
+        // Outlining the floor, or the outline is closed and the height is next/placed/typed.
+        final n = s.closed ? s.baseCount : pts.length;
+        if (n < 3 || pts.length < n) return null;
+        final base = pts.sublist(0, n);
         final edges = [
           for (var i = 0; i < base.length; i++)
             base[i].distanceTo(base[(i + 1) % base.length]),
@@ -292,9 +298,13 @@ class MeasureController extends ChangeNotifier {
             loop: s.loop,
           );
         }
-        // Height = how far the top point is above (or below) the average floor level.
-        final floorY = base.fold<double>(0, (a, p) => a + p.y) / base.length;
-        final h = (pts.last.y - floorY).abs();
+        var h = s.manualHeight;
+        if (h == null) {
+          if (pts.length != n + 1) return null;
+          // Height = how far the top point is above (or below) the average floor level.
+          final floorY = base.fold<double>(0, (a, p) => a + p.y) / n;
+          h = (pts.last.y - floorY).abs();
+        }
         return (
           mode: s.mode,
           value: floor * h,
@@ -328,7 +338,7 @@ class MeasureController extends ChangeNotifier {
         if (r.height == null) {
           return (
             value: formatArea(r.value, units),
-            sub: 'Floor area \u00B7 finish the outline, then set height',
+            sub: 'Floor area \u00B7 then set the height',
           );
         }
         return (
@@ -472,6 +482,7 @@ class MeasureController extends ChangeNotifier {
       depth: f.depthLevel,
       canFinish: canFinish,
       canCloseLoop: openOutline && canPlace,
+      canTypeHeight: _awaitingHeight,
       canUndo: canUndo,
       canSave: _savable != null,
       isSaved:
@@ -508,7 +519,7 @@ class MeasureController extends ChangeNotifier {
             : 'Tap + for more corners, or the check button to finish';
       case MeasureMode.volume:
         if (current.closed) {
-          return 'Aim at the top of the stack or the ceiling, then tap +';
+          return 'Aim at the top and tap +, or type the height';
         }
         return n < 3
             ? 'Tap + on each floor corner'
@@ -553,6 +564,27 @@ class MeasureController extends ChangeNotifier {
     } finally {
       _busy = false;
     }
+  }
+
+  /// Volume: outline closed, waiting for a height (measured or typed).
+  bool get _awaitingHeight =>
+      mode == MeasureMode.volume &&
+      current.closed &&
+      current.ids.length == current.baseCount &&
+      current.manualHeight == null;
+
+  /// Uses a typed-in height (metres) for the volume being built. Ignored unless the floor
+  /// outline is closed and no height has been set, or if [meters] is not a sane height.
+  bool setManualHeight(double meters) {
+    if (!_awaitingHeight || !meters.isFinite || meters <= 0 || meters > 100) {
+      return false;
+    }
+    current.manualHeight = meters;
+    done.add(current);
+    current = Shape(mode);
+    if (haptics) HapticFeedback.mediumImpact();
+    _refresh();
+    return true;
   }
 
   bool get _hasOutline =>
@@ -620,6 +652,11 @@ class MeasureController extends ChangeNotifier {
       if (done.isEmpty) return;
       current = done.removeLast()..savedId = null;
       mode = current.mode;
+      if (current.manualHeight != null) {
+        current.manualHeight = null; // back to "set the height"
+        _refresh();
+        return;
+      }
       // An area reopens as an outline; a volume goes back to waiting for its height point.
       if (current.mode == MeasureMode.area) _reopen(current);
     } else if (current.mode == MeasureMode.volume &&

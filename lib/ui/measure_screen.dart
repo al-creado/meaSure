@@ -7,6 +7,7 @@ import '../measure/units.dart';
 import '../storage/measurement_store.dart';
 import 'ar_view.dart';
 import 'overlay_painter.dart';
+import 'prompt_dialog.dart';
 import 'saved_screen.dart';
 import 'theme.dart';
 
@@ -143,6 +144,24 @@ class _Hud extends StatelessWidget {
                     SizedBox(width: 6),
                     Text(
                       'Close loop at start corner',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          if (hud.canTypeHeight)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _Pill(
+                onTap: () => _typeHeight(context, c),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.edit_outlined, size: 18),
+                    SizedBox(width: 6),
+                    Text(
+                      'Type height',
                       style: TextStyle(fontWeight: FontWeight.w600),
                     ),
                   ],
@@ -294,7 +313,9 @@ class _ResultCard extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Column(
+          // Flexible so a long sub-line wraps instead of overflowing small screens.
+          Flexible(
+            child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
@@ -309,6 +330,7 @@ class _ResultCard extends StatelessWidget {
               if (sub != null)
                 Text(
                   sub!,
+                  textAlign: TextAlign.center,
                   style: const TextStyle(
                     fontSize: 13,
                     color: Colors.white60,
@@ -316,6 +338,7 @@ class _ResultCard extends StatelessWidget {
                   ),
                 ),
             ],
+            ),
           ),
           if (showSave) ...[
             const SizedBox(width: 10),
@@ -686,4 +709,29 @@ void _closeLoop(BuildContext context, MeasureController c) {
         content: Text(text),
       ),
     );
+}
+
+/// Lets the user type a height instead of aiming at it (e.g. a ceiling out of AR range).
+Future<void> _typeHeight(BuildContext context, MeasureController c) async {
+  final metric = c.units == UnitSystem.metric;
+  final text = await showTextPrompt(
+    context,
+    title: 'Height',
+    hint: metric ? 'e.g. 8.5' : "e.g. 28 or 28' 6",
+    suffix: metric ? 'm' : 'ft',
+    helper: 'Floor to ceiling, or to the top of the stack',
+    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+    confirmLabel: 'Set',
+  );
+  if (text == null) return;
+  final meters = parseLengthInput(text, c.units);
+  if (meters == null || !c.setManualHeight(meters)) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          const SnackBar(content: Text('Enter a height between 0 and 100')),
+        );
+    }
+  }
 }

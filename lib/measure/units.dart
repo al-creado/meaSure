@@ -63,3 +63,23 @@ String _volumeNumber(double v) {
   }
   return buf.toString();
 }
+
+/// Parses a length typed by the user in the current unit system and returns metres, or null
+/// if it is not a positive number. Accepts "8", "8.5", "8,5"; imperial also accepts
+/// feet and inches like "26 ft 3" / "26'3\"".
+double? parseLengthInput(String text, UnitSystem units) {
+  final t = text.trim().toLowerCase().replaceAll(',', '.');
+  if (t.isEmpty) return null;
+  if (units == UnitSystem.metric) {
+    final v = double.tryParse(t);
+    return (v != null && v.isFinite && v > 0) ? v : null;
+  }
+  final m = RegExp(
+    r"""^(\d+(?:\.\d+)?)\s*(?:ft|feet|foot|')?\s*(?:(\d+(?:\.\d+)?)\s*(?:in|inch|inches|")?)?$""",
+  ).firstMatch(t);
+  if (m == null) return null;
+  final feet = double.parse(m.group(1)!);
+  final inches = m.group(2) == null ? 0.0 : double.parse(m.group(2)!);
+  final meters = (feet * 12 + inches) * 0.0254;
+  return meters > 0 ? meters : null;
+}

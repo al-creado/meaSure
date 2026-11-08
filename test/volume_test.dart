@@ -57,7 +57,7 @@ void main() {
     expect(c.current.closed, isTrue);
     expect(c.done, isEmpty, reason: 'a volume is not complete until it has a height');
     c.onFrame(makeFrame(hitX: 2, hitY: 2, hitZ: 1.5, distance: 1.5, anchors: anchors));
-    expect(c.hud.hint, contains('top of the stack'));
+    expect(c.hud.hint, contains('Aim at the top'));
     expect(c.hud.value, '24.00 m³');
     expect(c.hud.sub, '12.00 m² × 2.00 m');
     expect(c.hud.canSave, isFalse);

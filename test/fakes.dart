@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:ar_measure/ar/ar_backend.dart';
 import 'package:ar_measure/ar/ar_frame.dart';
+import 'package:flutter/services.dart';
 
 /// Builds an [ArFrame] the way the native side would, with an identity-ish camera looking
 /// down -Z and a simple perspective projection.
@@ -119,4 +121,24 @@ ArFrame portraitFrame(
   raw[13 + 9] = -s;
   raw[13 + 10] = c;
   return ArFrame(raw);
+}
+
+/// Loads the real Roboto + Material Icons so widget tests measure text with real glyph
+/// widths (the default test font is ~2x too wide and causes bogus overflows).
+Future<void> loadTestFonts() async {
+  final root = Platform.environment['FLUTTER_ROOT'] ?? '/opt/sdk/flutter';
+  final dir = '$root/bin/cache/artifacts/material_fonts';
+  Future<void> load(String family, List<String> files) async {
+    final loader = FontLoader(family);
+    for (final f in files) {
+      final file = File('$dir/$f');
+      if (file.existsSync()) {
+        loader.addFont(Future.value(ByteData.sublistView(file.readAsBytesSync())));
+      }
+    }
+    await loader.load();
+  }
+
+  await load('Roboto', ['Roboto-Regular.ttf', 'Roboto-Medium.ttf', 'Roboto-Bold.ttf']);
+  await load('MaterialIcons', ['MaterialIcons-Regular.otf']);
 }

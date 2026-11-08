@@ -158,12 +158,13 @@ class OverlayPainter extends CustomPainter {
     }
 
     // The box.
-    if (heightPhase && top != null && allKnown && n >= 3) {
+    final manual = s.manualHeight;
+    if (heightPhase && (top != null || manual != null) && allKnown && n >= 3) {
       final b = base.cast<Vec3>();
       final floorY = b.fold<double>(0, (a, p) => a + p.y) / n;
-      final h = top.y - floorY;
+      final h = manual ?? (top!.y - floorY);
       final up = Vec3(0, h, 0);
-      final heightIsLive = s.ids.length == s.baseCount;
+      final heightIsLive = manual == null && s.ids.length == s.baseCount;
       final color = heightIsLive ? kAccent : Colors.white;
       for (var i = 0; i < n; i++) {
         final j = (i + 1) % n;

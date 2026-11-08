@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../measure/measure_controller.dart';
 import '../storage/saved_measurement.dart';
+import 'prompt_dialog.dart';
 import 'theme.dart';
 
 /// List of measurements saved on this device.
@@ -228,34 +229,14 @@ class _Tile extends StatelessWidget {
   }
 
   Future<void> _editNote(BuildContext context) async {
-    final field = TextEditingController(text: item.note ?? '');
-    final result = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Add a note'),
-        content: TextField(
-          controller: field,
-          autofocus: true,
-          maxLength: 80,
-          textCapitalization: TextCapitalization.sentences,
-          decoration: const InputDecoration(
-            hintText: 'e.g. Living room window',
-          ),
-          onSubmitted: (v) => Navigator.pop(context, v),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, field.text),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
+    final result = await showTextPrompt(
+      context,
+      title: 'Add a note',
+      initial: item.note ?? '',
+      hint: 'e.g. Living room window',
+      maxLength: 80,
+      capitalization: TextCapitalization.sentences,
     );
-    field.dispose();
     if (result != null) await controller.setNote(item.id, result);
   }
 }
