@@ -9,6 +9,7 @@ import 'ar_view.dart';
 import 'overlay_painter.dart';
 import 'prompt_dialog.dart';
 import 'saved_screen.dart';
+import 'snapshot.dart';
 import 'theme.dart';
 
 class MeasureScreen extends StatefulWidget {
@@ -33,6 +34,9 @@ class _MeasureScreenState extends State<MeasureScreen> {
   late final MeasureController _c = MeasureController(
     widget.backend,
     store: widget.store,
+    // Saving a measurement also stores a photo of the scene with it drawn on top.
+    overlayRenderer: (shape, frame, size) =>
+        renderOverlayPng(_c, shape, frame, size),
   )..start();
 
   @override

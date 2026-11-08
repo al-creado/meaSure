@@ -29,6 +29,10 @@ class MainActivity : FlutterActivity() {
                     if (view == null) result.success(-1)
                     else view.place(call.argument<Int>("snapId"), result)
                 }
+                "capture" -> {
+                    val view = bridge.view
+                    if (view == null) result.success(null) else view.capture(result)
+                }
                 "remove" -> {
                     bridge.view?.remove(call.argument<Int>("id") ?: -1)
                     result.success(null)

@@ -113,11 +113,32 @@ typedef Reading = ({
   ({double error, double path})? loop,
 });
 
+/// Draws [shape] on a transparent layer for the camera photo taken with [frame], and
+/// returns it as PNG bytes. [pixels] is the photo size. Provided by the UI layer.
+typedef OverlayRenderer =
+    Future<Uint8List?> Function(Shape shape, ArFrame frame, Size pixels);
+
 class MeasureController extends ChangeNotifier {
-  MeasureController(this.ar, {required this.store, this.haptics = true});
+  MeasureController(
+    this.ar, {
+    required this.store,
+    this.overlayRenderer,
+    this.haptics = true,
+  });
 
   final ArBackend ar;
   final MeasurementStore store;
+
+  /// When set, saving a measurement also stores a photo of the scene with the measurement
+  /// drawn on it.
+  final OverlayRenderer? overlayRenderer;
+
+  final Map<String, Future<SavedImages?>> _imageFutures = {};
+  final Map<String, SavedImages> _undoImages = {};
+
+  /// The saved picture of an entry (cached), or null if it has none.
+  Future<SavedImages?> imagesFor(String id) =>
+      _imageFutures.putIfAbsent(id, () => store.loadImages(id));
 
   /// Saved measurements, newest first.
   List<SavedMeasurement> saved = [];
@@ -220,8 +241,8 @@ class MeasureController extends ChangeNotifier {
 
   /// World position of anchor [id] of shape [s], including any loop-closure correction.
   /// Null while ARCore is not tracking that anchor.
-  Vec3? pointOf(Shape s, int id) {
-    final p = frame.value?.anchors[id];
+  Vec3? pointOf(Shape s, int id, {ArFrame? frame}) {
+    final p = (frame ?? this.frame.value)?.anchors[id];
     if (p == null) return null;
     final a = s.adjust[id];
     return a == null ? p : p + a;
@@ -368,6 +389,28 @@ class MeasureController extends ChangeNotifier {
     }
     final r = _reading(s);
     if (r == null) return null;
+
+    // Photograph the scene with the measurement drawn on it. Any failure here just means
+    // the entry is saved without a picture.
+    SavedImages? images;
+    final render = overlayRenderer;
+    if (render != null) {
+      try {
+        final cap = await ar.captureFrame();
+        if (cap != null) {
+          final overlay = await render(
+            s,
+            cap.frame,
+            Size(cap.width.toDouble(), cap.height.toDouble()),
+          );
+          if (overlay != null) images = SavedImages(cap.jpeg, overlay);
+        }
+      } catch (_) {
+        images = null;
+      }
+      if (_savable != s) return null; // the user moved on while we were taking the photo
+    }
+
     final now = DateTime.now();
     final m = SavedMeasurement(
       id: now.microsecondsSinceEpoch.toString(),
@@ -377,18 +420,45 @@ class MeasureController extends ChangeNotifier {
       height: r.height,
       loopError: r.loop?.error,
       loopPath: r.loop?.path,
+      hasImage: images != null,
       edges: r.edges,
       createdAt: now,
     );
-    await store.save(m);
-    saved = [m, ...saved];
-    s.savedId = m.id;
+    var withImage = images != null;
+    if (images != null) {
+      try {
+        await store.saveImages(m.id, images);
+        _imageFutures[m.id] = Future.value(images);
+      } catch (_) {
+        withImage = false;
+      }
+    }
+    final toSave = withImage
+        ? m
+        : SavedMeasurement(
+            id: m.id,
+            mode: m.mode,
+            value: m.value,
+            secondary: m.secondary,
+            height: m.height,
+            loopError: m.loopError,
+            loopPath: m.loopPath,
+            edges: m.edges,
+            createdAt: m.createdAt,
+          );
+    await store.save(toSave);
+    saved = [toSave, ...saved];
+    s.savedId = toSave.id;
     if (haptics) HapticFeedback.mediumImpact();
     _refresh();
-    return m;
+    return toSave;
   }
 
   Future<void> deleteSaved(String id) async {
+    // Keep the picture in memory so "Undo" can bring it back.
+    final images = await imagesFor(id);
+    if (images != null) _undoImages[id] = images;
+    _imageFutures.remove(id);
     await store.delete(id);
     saved = [
       for (final m in saved)
@@ -402,6 +472,11 @@ class MeasureController extends ChangeNotifier {
 
   /// Puts back an entry removed by [deleteSaved] (undo).
   Future<void> restoreSaved(SavedMeasurement m) async {
+    final images = _undoImages.remove(m.id);
+    if (images != null) {
+      await store.saveImages(m.id, images);
+      _imageFutures[m.id] = Future.value(images);
+    }
     await store.save(m);
     saved = [...saved, m]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     notifyListeners();
@@ -417,6 +492,8 @@ class MeasureController extends ChangeNotifier {
   }
 
   Future<void> clearSaved() async {
+    _imageFutures.clear();
+    _undoImages.clear();
     await store.clear();
     saved = [];
     for (final s in done) {

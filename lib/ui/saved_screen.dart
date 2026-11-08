@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../measure/measure_controller.dart';
 import '../storage/saved_measurement.dart';
 import 'prompt_dialog.dart';
+import 'snapshot_view.dart';
 import 'theme.dart';
 
 /// List of measurements saved on this device.
@@ -157,6 +158,9 @@ class _Tile extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
             child: Row(
               children: [
+                if (item.hasImage)
+                  SnapshotThumb(controller: controller, item: item)
+                else
                 Container(
                   width: 42,
                   height: 42,

@@ -76,6 +76,15 @@ the drift (shown as an error and a percentage of the walk). It is then spread al
 proportion to the distance covered (the surveyors' compass rule), which closes the outline and
 removes most of a roughly linear drift. The error is saved with the measurement.
 
+### Pictures with saved measurements
+
+Saving a measurement also stores a photo of the scene with the measurement drawn on it
+(lines, labels, the 3D box for volumes). The native side captures the camera image together
+with that frame's AR data (`ArMeasureView.capture`), and Flutter draws the overlay for the
+same frame on a transparent PNG (`ui/snapshot.dart`). Photo (JPEG, <= 720 px wide) and overlay
+are separate files in the app's private storage, so the drawing stays sharp and files stay
+small. If the capture fails, the measurement is still saved, without a picture.
+
 ### Ideas to push it further
 
 - **Raw Depth API** (`acquireRawDepthImage16Bits` + confidence image): average a small patch

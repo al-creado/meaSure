@@ -65,6 +65,8 @@ class FakeAr implements ArBackend {
   final removed = <int>[];
   final snaps = <int?>[];
   bool cleared = false;
+  ArCapture? capture; // what captureFrame() returns (null = capture failed)
+  int captureCalls = 0;
   int _next = 1;
   int nextResult = 0; // 0 = hand out ids; otherwise return this
 
@@ -90,6 +92,12 @@ class FakeAr implements ArBackend {
 
   @override
   Future<void> clear() async => cleared = true;
+
+  @override
+  Future<ArCapture?> captureFrame() async {
+    captureCalls++;
+    return capture;
+  }
 }
 
 /// A portrait-phone frame (412x892 dp) looking horizontally at a floor 1.2 m below the

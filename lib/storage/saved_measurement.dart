@@ -15,6 +15,7 @@ class SavedMeasurement {
     this.height,
     this.loopError,
     this.loopPath,
+    this.hasImage = false,
     this.note,
   });
 
@@ -35,6 +36,9 @@ class SavedMeasurement {
   final double? loopError;
   final double? loopPath;
 
+  /// A photo of the scene with the measurement drawn on it was saved with this entry.
+  final bool hasImage;
+
   /// Lengths of the individual sides in metres (one for distance, two arms for angle,
   /// every edge of the outline for area and volume).
   final List<double> edges;
@@ -50,6 +54,7 @@ class SavedMeasurement {
     height: height,
     loopError: loopError,
     loopPath: loopPath,
+    hasImage: hasImage,
     edges: edges,
     createdAt: createdAt,
     note: (note == null || note.trim().isEmpty) ? null : note.trim(),
@@ -107,6 +112,7 @@ class SavedMeasurement {
     'height': height,
     'loopError': loopError,
     'loopPath': loopPath,
+    'hasImage': hasImage,
     'edges': edges,
     'createdAt': createdAt.millisecondsSinceEpoch,
     'note': note,
@@ -121,6 +127,7 @@ class SavedMeasurement {
     height: (j['height'] as num?)?.toDouble(),
     loopError: (j['loopError'] as num?)?.toDouble(),
     loopPath: (j['loopPath'] as num?)?.toDouble(),
+    hasImage: j['hasImage'] == true,
     edges: [
       for (final e in (j['edges'] as List? ?? const [])) (e as num).toDouble(),
     ],

@@ -14,14 +14,32 @@ import 'theme.dart';
 /// It repaints on every AR frame by listening to the frame notifier directly, so the widget
 /// tree is never rebuilt at camera rate.
 class OverlayPainter extends CustomPainter {
-  OverlayPainter(this.c) : super(repaint: Listenable.merge([c.frame, c]));
+  OverlayPainter(this.c)
+    : _frame = null,
+      _only = null,
+      super(repaint: Listenable.merge([c.frame, c]));
+
+  /// A still painter for one finished measurement, drawn with the AR data of the frame a
+  /// photo was taken from (used for the picture saved with a measurement). Draws no
+  /// reticle and nothing else from the live scene.
+  OverlayPainter.snapshot(this.c, ArFrame frame, Shape shape)
+    : _frame = frame,
+      _only = shape;
 
   final MeasureController c;
+  final ArFrame? _frame;
+  final Shape? _only;
 
   static const _lineWidth = 3.0;
 
   @override
   void paint(Canvas canvas, Size size) {
+    final only = _only;
+    if (only != null) {
+      final f = _frame!;
+      _drawShape(canvas, Projector(f, size), f, only, null);
+      return;
+    }
     final f = c.frame.value;
     if (f == null || f.tracking != ArTracking.tracking) {
       _drawIdleReticle(canvas, size, f);
@@ -41,10 +59,10 @@ class OverlayPainter extends CustomPainter {
   void _drawShape(Canvas canvas, Projector proj, ArFrame f, Shape s, Vec3? live) {
     // Placed points, in order. A null means ARCore has lost that anchor for now.
     if (s.mode == MeasureMode.volume) {
-      _drawVolume(canvas, proj, s, live);
+      _drawVolume(canvas, proj, f, s, live);
       return;
     }
-    final placed = <Vec3?>[for (final id in s.ids) c.pointOf(s, id)];
+    final placed = <Vec3?>[for (final id in s.ids) c.pointOf(s, id, frame: f)];
     final pts = <Vec3?>[...placed, if (live != null && !s.isComplete) live];
     if (pts.isEmpty) return;
     final liveIndex = (live != null && !s.isComplete) ? pts.length - 1 : -1;
@@ -106,8 +124,8 @@ class OverlayPainter extends CustomPainter {
   }
 
   /// Volume: floor outline, then a box up to the height point.
-  void _drawVolume(Canvas canvas, Projector proj, Shape s, Vec3? live) {
-    final placed = <Vec3?>[for (final id in s.ids) c.pointOf(s, id)];
+  void _drawVolume(Canvas canvas, Projector proj, ArFrame f, Shape s, Vec3? live) {
+    final placed = <Vec3?>[for (final id in s.ids) c.pointOf(s, id, frame: f)];
     final heightPhase = s.closed;
     final basePlaced = heightPhase ? placed.take(s.baseCount).toList() : placed;
     final Vec3? top = heightPhase

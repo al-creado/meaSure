@@ -1,6 +1,8 @@
 package dev.armeasure.ar_measure
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Matrix
 import android.opengl.GLES20
 import android.opengl.GLSurfaceView
 import android.os.Handler
@@ -23,7 +25,12 @@ import com.google.ar.core.TrackingState
 import com.google.ar.core.exceptions.CameraNotAvailableException
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.platform.PlatformView
+import java.io.ByteArrayOutputStream
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.util.EnumSet
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicReference
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 import kotlin.math.sqrt
@@ -101,6 +108,10 @@ class ArMeasureView(private val context: Context, private val bridge: ArBridge) 
     private var lastHit: HitResult? = null
     private var lastHitPos: FloatArray? = null // median position of the latest hit
 
+    // A snapshot request from Flutter, served on the GL thread at the next rendered frame.
+    private val pendingCapture = AtomicReference<MethodChannel.Result?>(null)
+    private val captureExecutor = Executors.newSingleThreadExecutor()
+
     private var scanPath = 0f
     private var scanKeyframe: FloatArray? = null
 
@@ -166,6 +177,7 @@ class ArMeasureView(private val context: Context, private val bridge: ArBridge) 
     }
 
     fun pause() {
+        pendingCapture.getAndSet(null)?.let { r -> main.post { r.success(null) } }
         if (!resumed) return
         resumed = false
         glView.onPause()
@@ -228,6 +240,57 @@ class ArMeasureView(private val context: Context, private val bridge: ArBridge) 
         }
     }
 
+    /**
+     * Grabs the camera image of the next frame together with that frame's AR data, so the
+     * overlay Flutter draws lines up exactly with the photo. Replies with
+     * {jpeg, width, height, frame} or null if it could not be done.
+     */
+    fun capture(result: MethodChannel.Result) {
+        if (!pendingCapture.compareAndSet(null, result)) {
+            main.post { result.success(null) } // another capture is already waiting
+        }
+    }
+
+    private fun serveCapture(frameData: FloatArray) {
+        val result = pendingCapture.getAndSet(null) ?: return
+        val w = viewWidth
+        val h = viewHeight
+        try {
+            // The framebuffer holds only the camera image at this point (the overlay is
+            // drawn by Flutter), so this is a clean photo.
+            val pixels = ByteBuffer.allocateDirect(w * h * 4).order(ByteOrder.nativeOrder())
+            GLES20.glReadPixels(0, 0, w, h, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, pixels)
+            val frameCopy = frameData.copyOf()
+            captureExecutor.execute {
+                try {
+                    pixels.rewind()
+                    val raw = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                    raw.copyPixelsFromBuffer(pixels)
+                    // GL reads bottom-up: flip vertically while scaling down to <= 720 px wide.
+                    val targetW = minOf(w, 720)
+                    val scale = targetW / w.toFloat()
+                    val m = Matrix().apply { setScale(scale, -scale) }
+                    val photo = Bitmap.createBitmap(raw, 0, 0, w, h, m, true)
+                    val out = ByteArrayOutputStream()
+                    photo.compress(Bitmap.CompressFormat.JPEG, 82, out)
+                    val reply = hashMapOf<String, Any>(
+                        "jpeg" to out.toByteArray(),
+                        "width" to photo.width,
+                        "height" to photo.height,
+                        "frame" to frameCopy,
+                    )
+                    raw.recycle()
+                    photo.recycle()
+                    main.post { result.success(reply) }
+                } catch (e: Throwable) {
+                    main.post { result.success(null) }
+                }
+            }
+        } catch (e: Throwable) {
+            main.post { result.success(null) }
+        }
+    }
+
     fun remove(id: Int) {
         glView.queueEvent { anchors.remove(id)?.detach() }
     }
@@ -277,7 +340,8 @@ class ArMeasureView(private val context: Context, private val bridge: ArBridge) 
         }
 
         background.draw(frame)
-        process(frame)
+        val data = process(frame)
+        if (pendingCapture.get() != null) serveCapture(data)
     }
 
     @Suppress("DEPRECATION")
@@ -286,7 +350,7 @@ class ArMeasureView(private val context: Context, private val bridge: ArBridge) 
 
     // --- Per-frame work ----------------------------------------------------------------------
 
-    private fun process(frame: Frame) {
+    private fun process(frame: Frame): FloatArray {
         val camera = frame.camera
         val tracking = camera.trackingState == TrackingState.TRACKING
         val camPos = camera.pose.translation
@@ -398,6 +462,7 @@ class ArMeasureView(private val context: Context, private val bridge: ArBridge) 
             i += 4
         }
         bridge.publish(out)
+        return out
     }
 
     /**
