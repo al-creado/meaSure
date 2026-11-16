@@ -62,6 +62,7 @@ class OverlayPainter extends CustomPainter {
       _drawVolume(canvas, proj, f, s, live);
       return;
     }
+    final k = c.calibration; // labels show calibrated values
     final placed = <Vec3?>[for (final id in s.ids) c.pointOf(s, id, frame: f)];
     final pts = <Vec3?>[...placed, if (live != null && !s.isComplete) live];
     if (pts.isEmpty) return;
@@ -91,7 +92,7 @@ class OverlayPainter extends CustomPainter {
       _line(canvas, seg.$1, seg.$2, isLive ? kAccent : Colors.white, dashed: isLive);
       // Angle shows its value at the corner instead of on the edges.
       if (s.mode != MeasureMode.angle && (seg.$1 - seg.$2).distance > 56) {
-        _label(canvas, proj.size, (seg.$1 + seg.$2) / 2, formatLength(a.distanceTo(b), units), accent: isLive);
+        _label(canvas, proj.size, (seg.$1 + seg.$2) / 2, formatLength(a.distanceTo(b) * k, units), accent: isLive);
       }
     }
     // Dashed closing hint for an open polygon.
@@ -112,7 +113,7 @@ class OverlayPainter extends CustomPainter {
     if (s.mode == MeasureMode.area && pts.length >= 3 && pts.every((p) => p != null)) {
       final all = pts.cast<Vec3>();
       final p = proj.project(centroid(all));
-      if (p != null) _label(canvas, proj.size, p, formatArea(polygonArea(all), units), accent: liveIndex >= 0, large: true);
+      if (p != null) _label(canvas, proj.size, p, formatArea(polygonArea(all) * k * k, units), accent: liveIndex >= 0, large: true);
     }
 
     // Placed points on top.
@@ -125,6 +126,7 @@ class OverlayPainter extends CustomPainter {
 
   /// Volume: floor outline, then a box up to the height point.
   void _drawVolume(Canvas canvas, Projector proj, ArFrame f, Shape s, Vec3? live) {
+    final k = c.calibration; // labels show calibrated values
     final placed = <Vec3?>[for (final id in s.ids) c.pointOf(s, id, frame: f)];
     final heightPhase = s.closed;
     final basePlaced = heightPhase ? placed.take(s.baseCount).toList() : placed;
@@ -158,7 +160,7 @@ class OverlayPainter extends CustomPainter {
       final isLive = liveCorner && i + 1 == n - 1;
       _line(canvas, seg.$1, seg.$2, isLive ? kAccent : Colors.white, dashed: isLive);
       if ((seg.$1 - seg.$2).distance > 56) {
-        _label(canvas, proj.size, (seg.$1 + seg.$2) / 2, formatLength(a.distanceTo(b), units), accent: isLive);
+        _label(canvas, proj.size, (seg.$1 + seg.$2) / 2, formatLength(a.distanceTo(b) * k, units), accent: isLive);
       }
     }
     if (n >= 3 && base.first != null && base.last != null) {
@@ -167,7 +169,7 @@ class OverlayPainter extends CustomPainter {
         if (heightPhase) {
           _line(canvas, seg.$1, seg.$2, Colors.white);
           if ((seg.$1 - seg.$2).distance > 56) {
-            _label(canvas, proj.size, (seg.$1 + seg.$2) / 2, formatLength(base.last!.distanceTo(base.first!), units));
+            _label(canvas, proj.size, (seg.$1 + seg.$2) / 2, formatLength(base.last!.distanceTo(base.first!) * k, units));
           }
         } else if (liveCorner) {
           _line(canvas, seg.$1, seg.$2, kAccent.withValues(alpha: 0.6), dashed: true);
@@ -180,7 +182,9 @@ class OverlayPainter extends CustomPainter {
     if (heightPhase && (top != null || manual != null) && allKnown && n >= 3) {
       final b = base.cast<Vec3>();
       final floorY = b.fold<double>(0, (a, p) => a + p.y) / n;
-      final h = manual ?? (top!.y - floorY);
+      // Drawn in raw AR space: a typed height is a real-world length, so divide by the scale.
+      final h = manual != null ? manual / k : (top!.y - floorY);
+      final realHeight = manual ?? h.abs() * k;
       final up = Vec3(0, h, 0);
       final heightIsLive = manual == null && s.ids.length == s.baseCount;
       final color = heightIsLive ? kAccent : Colors.white;
@@ -192,12 +196,12 @@ class OverlayPainter extends CustomPainter {
         if (lid != null) _line(canvas, lid.$1, lid.$2, color);
       }
       final mid = proj.project(midpoint(b.first, b.first + up));
-      if (mid != null) _label(canvas, proj.size, mid, formatLength(h.abs(), units), accent: heightIsLive);
+      if (mid != null) _label(canvas, proj.size, mid, formatLength(realHeight, units), accent: heightIsLive);
       // Mid-height, inside the box: that is where the volume is, and it keeps the label
       // clear of the aiming ring while the height is being set.
       final lidCenter = proj.project(centroid(b) + up.scale(0.5));
       if (lidCenter != null) {
-        _label(canvas, proj.size, lidCenter, formatVolume(polygonAreaXZ(b) * h.abs(), units),
+        _label(canvas, proj.size, lidCenter, formatVolume(polygonAreaXZ(b) * k * k * realHeight, units),
             accent: heightIsLive, large: true);
       }
     }

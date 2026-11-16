@@ -85,6 +85,17 @@ same frame on a transparent PNG (`ui/snapshot.dart`). Photo (JPEG, <= 720 px wid
 are separate files in the app's private storage, so the drawing stays sharp and files stay
 small. If the capture fails, the measurement is still saved, without a picture.
 
+### Scale calibration
+
+ARCore can misjudge the overall size of the world by a few percent, by a different amount each
+session, and a loop closure cannot see it (a uniformly wrong scale still returns to the start).
+Tap the accuracy pill -> *Calibrate scale*: measure something of known length in Distance mode
+(a tape, an A4 sheet, a credit card), then enter its real length. The factor is computed from the
+raw AR measurement (so calibrating again replaces it rather than stacking), and applies to
+everything: lengths x k, areas x k^2, volumes x k^3 (a typed height is already real, so only the
+floor scales), angles unchanged. It lasts for the current session only and is stored with each
+saved measurement. Accepted range is 0.5x - 2x; anything else is almost certainly a mistake.
+
 ### Ideas to push it further
 
 - **Raw Depth API** (`acquireRawDepthImage16Bits` + confidence image): average a small patch

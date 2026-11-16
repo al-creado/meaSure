@@ -15,6 +15,7 @@ class SavedMeasurement {
     this.height,
     this.loopError,
     this.loopPath,
+    this.calibration,
     this.hasImage = false,
     this.note,
   });
@@ -36,6 +37,9 @@ class SavedMeasurement {
   final double? loopError;
   final double? loopPath;
 
+  /// The scale factor from "Calibrate scale" that was applied to this entry, if any.
+  final double? calibration;
+
   /// A photo of the scene with the measurement drawn on it was saved with this entry.
   final bool hasImage;
 
@@ -54,6 +58,7 @@ class SavedMeasurement {
     height: height,
     loopError: loopError,
     loopPath: loopPath,
+    calibration: calibration,
     hasImage: hasImage,
     edges: edges,
     createdAt: createdAt,
@@ -82,8 +87,17 @@ class SavedMeasurement {
             ? 'Arms ${formatLength(edges[0], u)} · ${formatLength(edges[1], u)}'
             : null,
     };
-    final lines = [?main, ?loopText(u)];
+    final lines = [?main, ?loopText(u), ?calibrationText];
     return lines.isEmpty ? null : lines.join('\n');
+  }
+
+  /// e.g. "Scale calibrated ×0.966 (−3.4 %)".
+  String? get calibrationText {
+    final k = calibration;
+    if (k == null) return null;
+    final pct = (k - 1) * 100;
+    final sign = pct >= 0 ? '+' : '\u2212';
+    return 'Scale calibrated \u00D7${k.toStringAsFixed(3)} ($sign${pct.abs().toStringAsFixed(1)} %)';
   }
 
   /// e.g. "Loop closed, error 0.42 m (0.17 %)".
@@ -112,6 +126,7 @@ class SavedMeasurement {
     'height': height,
     'loopError': loopError,
     'loopPath': loopPath,
+    'calibration': calibration,
     'hasImage': hasImage,
     'edges': edges,
     'createdAt': createdAt.millisecondsSinceEpoch,
@@ -127,6 +142,7 @@ class SavedMeasurement {
     height: (j['height'] as num?)?.toDouble(),
     loopError: (j['loopError'] as num?)?.toDouble(),
     loopPath: (j['loopPath'] as num?)?.toDouble(),
+    calibration: (j['calibration'] as num?)?.toDouble(),
     hasImage: j['hasImage'] == true,
     edges: [
       for (final e in (j['edges'] as List? ?? const [])) (e as num).toDouble(),

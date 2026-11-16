@@ -155,6 +155,64 @@ class MeasureController extends ChangeNotifier {
 
   Hud hud = _initialHud;
 
+  /// Scale correction from "Calibrate scale": every length ARCore measured is multiplied by
+  /// this (areas by its square, volumes by its cube). 1.0 = not calibrated. Kept for the
+  /// current session only: ARCore's scale error changes between sessions, so a factor saved
+  /// from yesterday could make today worse.
+  double calibration = 1.0;
+
+  bool get isCalibrated => (calibration - 1).abs() > 1e-9;
+
+  /// Accepted range for a calibration factor; anything outside is almost certainly a
+  /// mistake (wrong points, wrong reference length).
+  static const minCalibration = 0.5;
+  static const maxCalibration = 2.0;
+
+  /// The finished distance on screen that can be used as a reference, in raw AR metres
+  /// (before calibration), or null if there is none.
+  Shape? get _referenceShape {
+    if (current.ids.isNotEmpty || done.isEmpty) return null;
+    final s = done.last;
+    return s.mode == MeasureMode.distance && s.isComplete ? s : null;
+  }
+
+  /// The length currently displayed for the reference distance (metres, calibrated), or null.
+  double? get referenceLength {
+    final s = _referenceShape;
+    if (s == null) return null;
+    final raw = _rawDistance(s);
+    return raw == null ? null : raw * calibration;
+  }
+
+  double? _rawDistance(Shape s) {
+    final pts = positionsOf(s);
+    return pts.length == 2 ? pts[0].distanceTo(pts[1]) : null;
+  }
+
+  /// Calibrates so the distance on screen reads [realMeters]. Because the factor is computed
+  /// from the raw AR measurement, calibrating again replaces the factor instead of stacking
+  /// on top of it. Returns false (and changes nothing) if there is no finished distance on
+  /// screen or the result would be implausible.
+  bool calibrateTo(double realMeters) {
+    final s = _referenceShape;
+    final raw = s == null ? null : _rawDistance(s);
+    if (raw == null || raw < 0.01 || !realMeters.isFinite || realMeters <= 0) {
+      return false;
+    }
+    final k = realMeters / raw;
+    if (k < minCalibration || k > maxCalibration) return false;
+    calibration = k;
+    if (haptics) HapticFeedback.mediumImpact();
+    _refresh();
+    return true;
+  }
+
+  void resetCalibration() {
+    if (!isCalibrated) return;
+    calibration = 1.0;
+    _refresh();
+  }
+
   /// Developer readout of camera/view sizes and hit quality; toggled by long-pressing the
   /// accuracy pill.
   bool showDebug = false;
@@ -259,6 +317,68 @@ class MeasureController extends ChangeNotifier {
   /// SI-unit reading of [s], optionally with [extra] (the reticle) as a provisional last
   /// point. Null while there are not enough points yet.
   Reading? _reading(Shape s, {Vec3? extra}) {
+    final r = _rawReading(s, extra: extra);
+    if (r == null || !isCalibrated) return r;
+    final k = calibration;
+    List<double> lengths(List<double> l) => [for (final e in l) e * k];
+    final loop = r.loop == null
+        ? null
+        : (error: r.loop!.error * k, path: r.loop!.path * k);
+    switch (r.mode) {
+      case MeasureMode.distance:
+        return (
+          mode: r.mode,
+          value: r.value * k,
+          secondary: null,
+          edges: lengths(r.edges),
+          height: null,
+          loop: null,
+        );
+      case MeasureMode.angle: // angles do not depend on scale
+        return (
+          mode: r.mode,
+          value: r.value,
+          secondary: null,
+          edges: lengths(r.edges),
+          height: null,
+          loop: null,
+        );
+      case MeasureMode.area:
+        return (
+          mode: r.mode,
+          value: r.value * k * k,
+          secondary: r.secondary! * k,
+          edges: lengths(r.edges),
+          height: null,
+          loop: loop,
+        );
+      case MeasureMode.volume:
+        if (r.height == null) {
+          // Floor outline only: floor area and perimeter.
+          return (
+            mode: r.mode,
+            value: r.value * k * k,
+            secondary: r.secondary! * k,
+            edges: lengths(r.edges),
+            height: null,
+            loop: loop,
+          );
+        }
+        // A typed height is a real-world number, so only the floor area is scaled; a
+        // measured height came from AR and is scaled like any other length.
+        final typed = s.manualHeight != null;
+        return (
+          mode: r.mode,
+          value: r.value * (typed ? k * k : k * k * k),
+          secondary: r.secondary! * k * k,
+          edges: lengths(r.edges),
+          height: typed ? r.height : r.height! * k,
+          loop: loop,
+        );
+    }
+  }
+
+  Reading? _rawReading(Shape s, {Vec3? extra}) {
     final pts = positionsOf(s, extra: extra);
     switch (s.mode) {
       case MeasureMode.distance:
@@ -420,6 +540,7 @@ class MeasureController extends ChangeNotifier {
       height: r.height,
       loopError: r.loop?.error,
       loopPath: r.loop?.path,
+      calibration: isCalibrated ? calibration : null,
       hasImage: images != null,
       edges: r.edges,
       createdAt: now,
@@ -443,6 +564,7 @@ class MeasureController extends ChangeNotifier {
             height: m.height,
             loopError: m.loopError,
             loopPath: m.loopPath,
+            calibration: m.calibration,
             edges: m.edges,
             createdAt: m.createdAt,
           );
@@ -714,7 +836,8 @@ class MeasureController extends ChangeNotifier {
     }
     current.loop = (error: e.length, path: total);
     finishOutline();
-    return current.loop ?? done.last.loop;
+    // Stored raw (the reading scales it); reported to the user in calibrated metres.
+    return (error: e.length * calibration, path: total * calibration);
   }
 
   void _reopen(Shape s) {

@@ -6,6 +6,7 @@ import '../measure/measure_controller.dart';
 import '../measure/units.dart';
 import '../storage/measurement_store.dart';
 import 'ar_view.dart';
+import 'accuracy_sheet.dart';
 import 'overlay_painter.dart';
 import 'prompt_dialog.dart';
 import 'saved_screen.dart';
@@ -86,8 +87,13 @@ class _Hud extends StatelessWidget {
           Row(
             children: [
               GestureDetector(
+                onTap: () => showAccuracySheet(context, c),
                 onLongPress: c.toggleDebug,
-                child: _AccuracyPill(quality: hud.quality, depth: hud.depth),
+                child: _AccuracyPill(
+                  quality: hud.quality,
+                  depth: hud.depth,
+                  scale: c.isCalibrated ? c.calibration : null,
+                ),
               ),
               const Spacer(),
               _SavedButton(
@@ -244,10 +250,13 @@ class _Pill extends StatelessWidget {
 }
 
 class _AccuracyPill extends StatelessWidget {
-  const _AccuracyPill({required this.quality, required this.depth});
+  const _AccuracyPill({required this.quality, required this.depth, this.scale});
 
   final int quality;
   final int depth;
+
+  /// Calibration factor to show next to the label, or null if not calibrated.
+  final double? scale;
 
   @override
   Widget build(BuildContext context) {
@@ -285,6 +294,17 @@ class _AccuracyPill extends StatelessWidget {
             Text(
               depth == 2 ? 'ToF' : 'Depth',
               style: const TextStyle(color: Colors.white60, fontSize: 11),
+            ),
+          ],
+          if (scale != null) ...[
+            const SizedBox(width: 8),
+            Text(
+              '\u00D7${scale!.toStringAsFixed(3)}',
+              style: const TextStyle(
+                color: kAccent,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ],
         ],
@@ -666,7 +686,7 @@ class _DebugPanel extends StatelessWidget {
             f.diagnostics,
             'hit ${f.hitKind.name}  dist ${f.hitDistance.toStringAsFixed(3)} m  '
                 'stab ${f.stability.toStringAsFixed(2)}',
-            'depth ${f.depthLevel}  anchors ${f.anchors.length}  scan ${(f.scanProgress * 100).round()}%',
+            'depth ${f.depthLevel}  anchors ${f.anchors.length}  scan ${(f.scanProgress * 100).round()}%  scale \u00D7${controller.calibration.toStringAsFixed(3)}',
           ].join('\n');
           return Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),

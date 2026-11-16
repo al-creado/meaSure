@@ -74,12 +74,47 @@ double? parseLengthInput(String text, UnitSystem units) {
     final v = double.tryParse(t);
     return (v != null && v.isFinite && v > 0) ? v : null;
   }
+  // "11.7 in" (inches only) must not be read as 11.7 feet.
+  final inchesOnly = RegExp(r"""^(\d+(?:\.\d+)?)\s*(?:in|inch|inches|")$""").firstMatch(t);
+  if (inchesOnly != null) {
+    final meters = double.parse(inchesOnly.group(1)!) * 0.0254;
+    return meters > 0 ? meters : null;
+  }
+  // Feet, optionally followed by inches. Inches may only follow a feet marker, so "11 7"
+  // is rejected rather than guessed at; a bare number is feet.
   final m = RegExp(
-    r"""^(\d+(?:\.\d+)?)\s*(?:ft|feet|foot|')?\s*(?:(\d+(?:\.\d+)?)\s*(?:in|inch|inches|")?)?$""",
+    r"""^(\d+(?:\.\d+)?)\s*(?:(?:ft|feet|foot|')\s*(?:(\d+(?:\.\d+)?)\s*(?:in|inch|inches|")?)?)?$""",
   ).firstMatch(t);
   if (m == null) return null;
   final feet = double.parse(m.group(1)!);
   final inches = m.group(2) == null ? 0.0 : double.parse(m.group(2)!);
   final meters = (feet * 12 + inches) * 0.0254;
   return meters > 0 ? meters : null;
+}
+
+/// Parses the real length of a reference object typed by the user and returns metres, or
+/// null if it is not a positive number. Meant for small things (a sheet of paper, a card, a
+/// tape measure), so a bare number means centimetres (inches in imperial); units can be
+/// given: "29.7", "297 mm", "0.297 m", "11.7 in", "2 ft 3".
+double? parseReferenceLength(String text, UnitSystem units) {
+  final t = text.trim().toLowerCase().replaceAll(',', '.');
+  if (t.isEmpty) return null;
+  if (units == UnitSystem.metric) {
+    final m = RegExp(r'^(\d+(?:\.\d+)?)\s*(mm|cm|m)?$').firstMatch(t);
+    if (m == null) return null;
+    final v = double.parse(m.group(1)!);
+    final meters = switch (m.group(2)) {
+      'mm' => v / 1000,
+      'm' => v,
+      _ => v / 100,
+    };
+    return meters > 0 ? meters : null;
+  }
+  // Imperial: a bare number is inches; anything with feet/inches goes through the usual parser.
+  final bare = RegExp(r'^(\d+(?:\.\d+)?)$').firstMatch(t);
+  if (bare != null) {
+    final meters = double.parse(bare.group(1)!) * 0.0254;
+    return meters > 0 ? meters : null;
+  }
+  return parseLengthInput(t, units);
 }
