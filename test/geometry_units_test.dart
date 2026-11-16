@@ -91,6 +91,28 @@ void main() {
       expect(formatLength(0.0254 * 23.9, UnitSystem.imperial), '2′ 0″');
     });
 
+    test('volumes stay readable from a matchbox to a warehouse', () {
+      // The case from the field: ~19 cm2 x 2.7 cm = ~51 cm3 used to show as "0.00 m3".
+      expect(formatVolume(0.0000513, UnitSystem.metric), '51 cm\u00B3');
+      expect(formatVolume(0.000005, UnitSystem.metric), '5.0 cm\u00B3');
+      expect(formatVolume(0, UnitSystem.metric), '0.0 cm\u00B3');
+      expect(formatVolume(0.000999, UnitSystem.metric), '999 cm\u00B3');
+      expect(formatVolume(0.001, UnitSystem.metric), '0.001 m\u00B3');
+      expect(formatVolume(0.034, UnitSystem.metric), '0.034 m\u00B3');
+      expect(formatVolume(0.35, UnitSystem.metric), '0.350 m\u00B3');
+      expect(formatVolume(12, UnitSystem.metric), '12.00 m\u00B3');
+      expect(formatVolume(19200, UnitSystem.metric), '19,200 m\u00B3');
+      expect(formatVolume(0.0000513, UnitSystem.imperial), '3.1 in\u00B3');
+      expect(formatVolume(0.0005, UnitSystem.imperial), '31 in\u00B3');
+      expect(formatVolume(0.01, UnitSystem.imperial), '0.353 ft\u00B3');
+      expect(formatVolume(1, UnitSystem.imperial), '35.31 ft\u00B3');
+    });
+
+    test('small areas keep a decimal', () {
+      expect(formatArea(0.0007, UnitSystem.metric), '7.0 cm\u00B2');
+      expect(formatArea(0.0019, UnitSystem.metric), '19.0 cm\u00B2');
+    });
+
     test('area and angle', () {
       expect(formatArea(2.5, UnitSystem.metric), '2.50 m²');
       expect(formatArea(0.05, UnitSystem.metric), '500 cm²');

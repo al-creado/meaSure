@@ -28,7 +28,8 @@ String formatLength(double meters, UnitSystem units) {
 String formatArea(double squareMeters, UnitSystem units) {
   if (units == UnitSystem.metric) {
     if (squareMeters < 0.1) {
-      return '${(squareMeters * 10000).toStringAsFixed(0)} cm²';
+      final cm2 = squareMeters * 10000;
+      return '${cm2.toStringAsFixed(cm2 < 100 ? 1 : 0)} cm²';
     }
     return '${squareMeters.toStringAsFixed(2)} m²';
   }
@@ -47,14 +48,30 @@ String _trim(double v, int digits) {
 /// Formats a volume given in cubic metres.
 String formatVolume(double cubicMeters, UnitSystem units) {
   if (units == UnitSystem.metric) {
+    // Small things (a box, a parcel) need cm3; stacks and warehouses need m3.
+    if (cubicMeters < 0.001) {
+      return '${_group(cubicMeters * 1e6, 1)} cm\u00B3';
+    }
     return '${_volumeNumber(cubicMeters)} m\u00B3';
   }
-  return '${_volumeNumber(cubicMeters * 35.3146667)} ft\u00B3';
+  final cubicFeet = cubicMeters * 35.3146667;
+  if (cubicFeet < 0.1) {
+    return '${_group(cubicFeet * 1728, 1)} in\u00B3';
+  }
+  return '${_volumeNumber(cubicFeet)} ft\u00B3';
 }
 
-// 2 decimals for small volumes, whole numbers with thousands separators for big ones.
+// Enough digits to stay meaningful at every size: 3 decimals below 1, 2 decimals below 100,
+// whole numbers with thousands separators above.
 String _volumeNumber(double v) {
+  if (v < 1) return v.toStringAsFixed(3);
   if (v < 100) return v.toStringAsFixed(2);
+  return _group(v, 0);
+}
+
+/// [v] with thousands separators; one decimal if it is below 10 and [smallDecimals] > 0.
+String _group(double v, int smallDecimals) {
+  if (v < 10 && smallDecimals > 0) return v.toStringAsFixed(smallDecimals);
   final whole = v.round().toString();
   final buf = StringBuffer();
   for (var i = 0; i < whole.length; i++) {
@@ -75,7 +92,8 @@ double? parseLengthInput(String text, UnitSystem units) {
     return (v != null && v.isFinite && v > 0) ? v : null;
   }
   // "11.7 in" (inches only) must not be read as 11.7 feet.
-  final inchesOnly = RegExp(r"""^(\d+(?:\.\d+)?)\s*(?:in|inch|inches|")$""").firstMatch(t);
+  final inchesOnly = RegExp(r"""^(\d+(?:\.\d+)?)\s*(?:in|inch|inches|")$""")
+      .firstMatch(t);
   if (inchesOnly != null) {
     final meters = double.parse(inchesOnly.group(1)!) * 0.0254;
     return meters > 0 ? meters : null;

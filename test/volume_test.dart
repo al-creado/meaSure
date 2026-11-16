@@ -20,7 +20,10 @@ void main() {
   tearDown(() => c.dispose());
 
   /// Places [corners] (x, y, z) one after another; returns the anchor map so far.
-  Future<Map<int, List<double>>> placeAll(List<List<double>> corners) async {
+  Future<Map<int, List<double>>> placeAll(
+    List<List<double>> corners, {
+    double distance = 1.5, // camera-to-surface; the snapping radius grows with it
+  }) async {
     final anchors = <int, List<double>>{};
     for (final p in corners) {
       c.onFrame(
@@ -28,7 +31,7 @@ void main() {
           hitX: p[0],
           hitY: p[1],
           hitZ: p[2],
-          distance: 1.5,
+          distance: distance,
           anchors: Map.of(anchors),
         ),
       );
@@ -88,6 +91,24 @@ void main() {
     c.finishOutline();
     c.onFrame(makeFrame(hitX: 1, hitY: 0.5, hitZ: 1, distance: 1.5, anchors: anchors));
     expect(c.hud.value, '6.00 m³'); // 4 m2 x 1.5 m
+  });
+
+  test('a small box reads in cm3, not "0.00 m3" (field report)', () async {
+    // 5.5 x 3.2 cm floor, 2.7 cm tall: about 48 cm3.
+    final anchors = await placeAll([
+      [0, 0, -0.30],
+      [0.055, 0, -0.30],
+      [0.055, 0, -0.268],
+      [0, 0, -0.268],
+    ], distance: 0.3);
+    c.finishOutline();
+    expect(c.setManualHeight(0.027), isTrue);
+    c.onFrame(makeFrame(hitX: 0.5, hitY: 0, hitZ: -0.3, distance: 0.3, anchors: anchors));
+    expect(c.hud.value, '48 cm\u00B3');
+    expect(c.hud.sub, '17.6 cm\u00B2 \u00D7 2.7 cm');
+    final m = (await c.saveActive())!;
+    expect(m.valueText(UnitSystem.metric), '48 cm\u00B3');
+    expect(m.valueText(UnitSystem.imperial), '2.9 in\u00B3');
   });
 
   test('big warehouse numbers format with thousands separators', () async {
