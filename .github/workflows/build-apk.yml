@@ -1,10 +1,11 @@
 name: Build APK
 
-# Builds a release APK on every push to `testing`, and on demand from the Actions tab
+# The release APK is built ONLY when `main` is pushed, or on demand from the Actions tab
 # (Actions -> Build APK -> Run workflow). Download it from the run's "Artifacts" section.
+# Pushes to `testing` only run the analyze + test job.
 on:
   push:
-    branches: [testing]
+    branches: [main, testing]
   workflow_dispatch:
 
 concurrency:
@@ -14,6 +15,8 @@ concurrency:
 jobs:
   apk:
     name: Build release APK
+    # Not on `testing`: only main, or a manual run.
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -46,7 +49,7 @@ jobs:
           retention-days: 30
 
   checks:
-    # Separate job so a failing test never stops you from getting an APK.
+    # Separate job so a failing test never stops you from getting an APK. Runs on every push.
     name: Analyze and test
     runs-on: ubuntu-latest
     timeout-minutes: 20
