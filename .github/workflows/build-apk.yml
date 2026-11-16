@@ -1,12 +1,18 @@
 name: Build APK
 
 # The release APK is built ONLY when `main` is pushed, or on demand from the Actions tab
-# (Actions -> Build APK -> Run workflow). Download it from the run's "Artifacts" section.
-# Pushes to `testing` only run the analyze + test job.
+# (Actions -> Build APK -> Run workflow). Pushes to `testing` only run analyze + test.
+#
+# The APK is published as a plain file on the "latest" GitHub Release (workflow artifacts are
+# always zipped, a release asset is not):
+#   https://github.com/<owner>/<repo>/releases/latest/download/measure-app.apk
 on:
   push:
     branches: [main, testing]
   workflow_dispatch:
+
+permissions:
+  contents: write # needed to publish the release
 
 concurrency:
   group: build-apk-${{ github.ref }}
@@ -39,14 +45,18 @@ jobs:
       - run: flutter build apk --release
 
       - name: Name the APK
-        run: cp build/app/outputs/flutter-apk/app-release.apk "measure-${GITHUB_SHA::7}.apk"
+        run: cp build/app/outputs/flutter-apk/app-release.apk measure-app.apk
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: measure-apk
-          path: measure-*.apk
-          if-no-files-found: error
-          retention-days: 30
+      # Replace the rolling "latest" release so the download link never changes.
+      - name: Publish as a plain .apk
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest measure-app.apk \
+            --target "$GITHUB_SHA" \
+            --title "MeaSure (latest build)" \
+            --notes "Built from ${GITHUB_SHA::7} on ${GITHUB_REF_NAME}. Download measure-app.apk and open it on your phone to install."
 
   checks:
     # Separate job so a failing test never stops you from getting an APK. Runs on every push.

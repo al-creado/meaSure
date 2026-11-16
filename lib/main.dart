@@ -33,7 +33,7 @@ class MeasureApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final backend = _backend;
     return MaterialApp(
-      title: 'Measure',
+      title: 'MeaSure',
       debugShowCheckedModeBanner: false,
       theme: buildTheme(),
       home: ArGate(

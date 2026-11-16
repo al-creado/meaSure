@@ -133,6 +133,8 @@ class _Message extends StatelessWidget {
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     return Scaffold(
+      // Same colour as the native splash screen, so the hand-over from it is seamless.
+      backgroundColor: const Color(0xFF111418),
       body: SafeArea(
         child: Center(
           child: Padding(
@@ -140,6 +142,15 @@ class _Message extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                if (busy) ...[
+                  Image.asset(
+                    'assets/logo.png',
+                    width: 132,
+                    height: 132,
+                    errorBuilder: (_, _, _) => const SizedBox(height: 132),
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 if (busy)
                   const SizedBox(
                     width: 28,

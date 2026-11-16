@@ -1,4 +1,4 @@
-# Measure
+# MeaSure
 
 A lightweight AR tape measure for Android, in Flutter. Point the camera, tap **+**, read the
 distance. Modes: **Distance**, **Area** (any polygon, on floors, walls or tabletops), **Volume** (floor outline x height: stacks, rooms, warehouses) and **Angle**.
@@ -21,6 +21,22 @@ built on the deprecated Sceneform). Native code owns the camera, tracking, depth
 Flutter only receives a flat float array per frame (view + projection matrices, the surface
 under the reticle, and anchor positions) and draws the overlay itself with the *same*
 matrices, so lines stay locked to the world. No 3D engine, no meshes: that is what keeps it light.
+
+## Get the APK
+
+Pushing to `main` builds a release APK on GitHub (pushes to `testing` only run the checks; you can
+also start a build by hand from *Actions -> Build APK -> Run workflow*). It is published as a plain
+file, no zip:
+
+<https://github.com/al-creado/meaSure/releases/latest/download/measure-app.apk>
+
+Open that link on your phone (signed in to GitHub if the repo is private) and install the file.
+
+## Icon and splash
+
+The launcher icon (adaptive + Android 13 themed), the splash screen and `assets/logo.png` are drawn by
+`python3 tool/generate_icons.py` (needs Pillow). Change the drawing there and re-run it; it rewrites every
+density under `android/app/src/main/res/`.
 
 ## Run it
 
